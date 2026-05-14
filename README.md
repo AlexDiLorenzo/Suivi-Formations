@@ -93,10 +93,13 @@ Front dispo sur http://localhost:5173. Vite proxie automatiquement `/api/*` vers
 
 ## Workflow n8n (etape 6 : relances)
 
-n8n est l'orchestrateur (cron + envoi email via son propre node SMTP/
-Brevo). Le backend fournit la liste de qui relancer et l'audit du
-sent_at. Pre-requis : `REMINDERS_SECRET` et `FRONTEND_BASE_URL` dans le
-`.env` du backend, **redemarrer le service** apres modification.
+Workflow JSON pret a importer dans **`n8n/relances-quotidiennes.json`**.
+Voir `n8n/README.md` pour la procedure d'import + creation des credentials.
+
+n8n est l'orchestrateur (cron + envoi email via Resend). Le backend
+fournit la liste de qui relancer et l'audit du sent_at. Pre-requis :
+`REMINDERS_SECRET` et `FRONTEND_BASE_URL` dans le `.env` du backend,
+**redemarrer le service** apres modification.
 
 ### Flux
 

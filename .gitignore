@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Env / secrets
+.env
+.env.local
+.env.*.local
+
+# Donnees locales (au cas ou on monte des volumes ailleurs que dans docker)
+data/
+documents_storage/
+
+# IDE
+.vscode/
+.idea/
+.claude/
+
+# Node (pour le futur frontend)
+node_modules/
+dist/
+.vite/
+
+# Misc
+*.log
+.DS_Store
+Thumbs.db

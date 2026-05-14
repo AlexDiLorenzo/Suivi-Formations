@@ -1,0 +1,54 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: habilitation-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - habilitation-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    container_name: habilitation-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      JWT_SECRET: ${JWT_SECRET}
+      FILE_ENCRYPTION_KEY: ${FILE_ENCRYPTION_KEY}
+      CORS_ORIGINS: ${CORS_ORIGINS}
+      ENV: prod
+    volumes:
+      - documents_data:/var/lib/habilitation/documents
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    networks:
+      - habilitation-net
+      - web
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=web"
+      - "traefik.http.routers.habilitation.rule=Host(`formations.alex-worksmart.com`)"
+      - "traefik.http.routers.habilitation.entrypoints=websecure"
+      - "traefik.http.routers.habilitation.tls=true"
+      - "traefik.http.routers.habilitation.tls.certresolver=cloudflare"
+      - "traefik.http.services.habilitation.loadbalancer.server.port=8000"
+
+volumes:
+  postgres_data:
+  documents_data:
+
+networks:
+  habilitation-net:
+  web:
+    external: true

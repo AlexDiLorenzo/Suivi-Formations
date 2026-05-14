@@ -222,7 +222,7 @@ function UploadModal({ driver, docType, currentVersionId, pendingVersionId, onCl
   const [uploading, setUploading] = useState(false)
   const [downloading, setDownloading] = useState(false)
   const [requesting, setRequesting] = useState(false)
-  const [magicLink, setMagicLink] = useState(null)
+  const [requestResult, setRequestResult] = useState(null)
   const [linkCopied, setLinkCopied] = useState(false)
   const [error, setError] = useState('')
   const [pendingVersion, setPendingVersion] = useState(null)
@@ -287,7 +287,7 @@ function UploadModal({ driver, docType, currentVersionId, pendingVersionId, onCl
         driverId: driver.id,
         documentTypeId: docType.id,
       })
-      setMagicLink(created.magic_link)
+      setRequestResult(created)
     } catch (err) {
       setError(err.detail || 'Erreur lors de la creation de la demande')
     } finally {
@@ -296,9 +296,9 @@ function UploadModal({ driver, docType, currentVersionId, pendingVersionId, onCl
   }
 
   async function handleCopyLink() {
-    if (!magicLink) return
+    if (!requestResult?.magic_link) return
     try {
-      await navigator.clipboard.writeText(magicLink)
+      await navigator.clipboard.writeText(requestResult.magic_link)
       setLinkCopied(true)
       setTimeout(() => setLinkCopied(false), 2000)
     } catch {
@@ -437,26 +437,43 @@ function UploadModal({ driver, docType, currentVersionId, pendingVersionId, onCl
           <div className="section">
             <h3>Demander au depanneur</h3>
             <p className="hint">
-              Genere un lien a usage unique (valide 7 jours) que tu peux envoyer
-              au depanneur par WhatsApp / SMS / email pour qu'il uploade lui-meme
-              son document. La version sera creee en attente de ta validation.
+              Genere une demande a usage unique (valide 7 jours). Si le
+              depanneur a un email enregistre, il recoit automatiquement
+              le lien securise. Sinon le lien s'affiche ici, copiable pour
+              envoi WhatsApp / SMS.
             </p>
-            {!magicLink ? (
+            {!requestResult ? (
               <button
                 type="button"
                 className="btn btn-ghost"
                 onClick={handleCreateRequest}
                 disabled={requesting}
               >
-                {requesting ? 'Generation…' : 'Generer un lien magique'}
+                {requesting ? 'Envoi…' : 'Envoyer la demande'}
               </button>
             ) : (
-              <div className="magic-link">
-                <input type="text" readOnly value={magicLink} onFocus={(e) => e.target.select()} />
-                <button type="button" className="btn btn-sm" onClick={handleCopyLink}>
-                  {linkCopied ? 'Copie ✓' : 'Copier'}
-                </button>
-              </div>
+              <>
+                {requestResult.email_sent ? (
+                  <div className="email-status success">
+                    ✓ Email envoye a <strong>{requestResult.driver_email}</strong>
+                  </div>
+                ) : (
+                  <div className="email-status warn">
+                    {requestResult.email_error || 'Email non envoye'} — copie le lien ci-dessous :
+                  </div>
+                )}
+                <div className="magic-link">
+                  <input
+                    type="text"
+                    readOnly
+                    value={requestResult.magic_link}
+                    onFocus={(e) => e.target.select()}
+                  />
+                  <button type="button" className="btn btn-sm" onClick={handleCopyLink}>
+                    {linkCopied ? 'Copie ✓' : 'Copier'}
+                  </button>
+                </div>
+              </>
             )}
           </div>
 

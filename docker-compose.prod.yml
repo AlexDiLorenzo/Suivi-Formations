@@ -30,6 +30,9 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS}
       REMINDERS_SECRET: ${REMINDERS_SECRET}
       FRONTEND_BASE_URL: ${FRONTEND_BASE_URL}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      MAIL_FROM: ${MAIL_FROM}
+      MAIL_REPLY_TO: ${MAIL_REPLY_TO}
       ENV: prod
     volumes:
       - documents_data:/var/lib/habilitation/documents

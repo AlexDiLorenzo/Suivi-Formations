@@ -30,6 +30,13 @@ class Settings(BaseSettings):
     never_received_grace_days: int = 7
     never_received_interval_days: int = 7
 
+    # Envoi d'email via Resend (https://resend.com).
+    # Si RESEND_API_KEY est vide, l'envoi est desactive et l'admin
+    # devra copier le magic_link manuellement.
+    resend_api_key: str = ""
+    mail_from: str = "Habilitations 1MDP <habilitations@example.com>"
+    mail_reply_to: str = ""
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

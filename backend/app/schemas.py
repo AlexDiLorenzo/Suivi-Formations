@@ -176,6 +176,9 @@ class DocumentRequestCreated(BaseModel):
     token: str
     magic_link: str
     expires_at: datetime
+    driver_email: EmailStr | None = None
+    email_sent: bool = False
+    email_error: str | None = None
 
 
 class PublicDocumentRequestInfo(BaseModel):

@@ -609,6 +609,25 @@ input[type="file"]::file-selector-button:hover {
   font-size: 12px;
 }
 
+.email-status {
+  padding: 10px 12px;
+  border-radius: 4px;
+  font-size: 13px;
+  margin-bottom: 10px;
+}
+
+.email-status.success {
+  background: rgba(44, 97, 38, 0.10);
+  color: var(--c-primary);
+  border: 1px solid rgba(44, 97, 38, 0.25);
+}
+
+.email-status.warn {
+  background: rgba(217, 122, 31, 0.10);
+  color: var(--c-status-orange);
+  border: 1px solid rgba(217, 122, 31, 0.25);
+}
+
 /* ---------------- Public upload page ---------------- */
 
 .public-shell {

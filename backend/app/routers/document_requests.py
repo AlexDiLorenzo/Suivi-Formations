@@ -21,6 +21,7 @@ from app.models import (
     DriverStatus,
     UploadedBy,
 )
+from app.mailer import send_magic_link_email
 from app.routers.documents import MAX_FILE_BYTES, PDF_MAGIC
 from app.schemas import (
     DocumentRequestCreate,
@@ -99,6 +100,8 @@ def create_request(
             detail="Ce type de document n'est pas applicable a ce depanneur",
         )
 
+    doc_type = db.get(DocumentType, payload.document_type_id)
+
     token = secrets.token_urlsafe(32)
     doc_request = DocumentRequest(
         driver_id=payload.driver_id,
@@ -112,11 +115,28 @@ def create_request(
     db.refresh(doc_request)
 
     magic_link = f"{_frontend_base(request)}/upload/{token}"
+
+    email_sent = False
+    email_error: str | None = None
+    if driver.email:
+        email_sent, email_error = send_magic_link_email(
+            to=driver.email,
+            driver_prenom=driver.prenom,
+            doc_type_libelle=doc_type.libelle if doc_type else "document",
+            magic_link=magic_link,
+            expires_at=doc_request.expires_at,
+        )
+    else:
+        email_error = "Le depanneur n'a pas d'email enregistre"
+
     return DocumentRequestCreated(
         id=doc_request.id,
         token=token,
         magic_link=magic_link,
         expires_at=doc_request.expires_at,
+        driver_email=driver.email,
+        email_sent=email_sent,
+        email_error=email_error,
     )
 
 

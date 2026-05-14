@@ -93,8 +93,13 @@ qui gere TLS auto (Cloudflare DNS challenge). Domaine :
 
    ```
    sudo docker compose -f docker-compose.prod.yml exec backend python -m scripts.seed_doctypes
-   sudo docker compose -f docker-compose.prod.yml exec backend python -m scripts.create_admin --email vous@1mdp.fr --name "Votre Nom" --password "..."
+   sudo docker compose -f docker-compose.prod.yml exec backend python -m scripts.create_admin \
+       --email <VOTRE_EMAIL> --name "<VOTRE_NOM>" --password '<MOT_DE_PASSE>'
    ```
+
+   ATTENTION : remplacer les `<...>` par les vraies valeurs avant d'executer.
+   Mettre le mot de passe entre quotes simples si jamais il contient `$`, `!`
+   ou autres caracteres interpretes par le shell.
 
 ### Workflow de deploiement (changements ulterieurs)
 

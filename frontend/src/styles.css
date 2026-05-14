@@ -275,6 +275,17 @@ td.cell.orange { background: var(--c-status-orange); }
 td.cell.red    { background: var(--c-status-red); }
 td.cell.grey   { background: var(--c-status-grey); color: var(--c-text-muted); }
 
+td.cell.clickable {
+  cursor: pointer;
+  transition: filter 0.1s;
+}
+
+td.cell.clickable:hover {
+  filter: brightness(1.12);
+  outline: 2px solid rgba(228, 225, 60, 0.6);
+  outline-offset: -2px;
+}
+
 td.cell .date {
   display: block;
   font-weight: 600;
@@ -489,3 +500,45 @@ td.actions {
 
 .check input { margin: 0; }
 .check:hover { border-color: var(--c-primary); }
+
+/* ---------------- Upload modal ---------------- */
+
+.info-block {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  background: #F4F3EE;
+  border: 1px solid var(--c-border);
+  border-radius: 4px;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+input[type="file"] {
+  width: 100%;
+  padding: 8px;
+  border: 1px dashed var(--c-border);
+  border-radius: 4px;
+  background: #FAFAF7;
+  font-family: inherit;
+  font-size: 13px;
+}
+
+input[type="file"]::file-selector-button {
+  padding: 6px 12px;
+  border: 1px solid var(--c-primary);
+  background: white;
+  color: var(--c-primary);
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  margin-right: 10px;
+}
+
+input[type="file"]::file-selector-button:hover {
+  background: var(--c-primary);
+  color: white;
+}

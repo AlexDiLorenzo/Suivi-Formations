@@ -106,6 +106,7 @@ def get_dashboard(db: Annotated[Session, Depends(get_db)]):
                     reason=reason,
                     date_peremption=current.date_peremption,
                     days_until_expiry=days,
+                    current_version_id=current.id,
                 )
             )
             counter[status_value] += 1

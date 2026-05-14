@@ -109,10 +109,15 @@ function SummaryBar({ summary }) {
   )
 }
 
-function MatrixCell({ cell }) {
+function MatrixCell({ cell, onClick }) {
   const sub = cellSubLabel(cell)
+  const clickable = cell.status !== 'grey'
   return (
-    <td className={`cell ${cell.status}`}>
+    <td
+      className={`cell ${cell.status} ${clickable ? 'clickable' : ''}`}
+      onClick={clickable ? onClick : undefined}
+      title={clickable ? 'Cliquer pour uploader / consulter' : 'Non applicable'}
+    >
       {cell.status === 'grey' ? (
         <span>—</span>
       ) : (
@@ -125,16 +130,29 @@ function MatrixCell({ cell }) {
   )
 }
 
-function DashboardView() {
+function DashboardView({ docTypes }) {
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
+  const [uploadCtx, setUploadCtx] = useState(null)
 
-  useEffect(() => {
+  function reload() {
     api.dashboard().then(setData).catch((e) => setError(e.detail || String(e)))
-  }, [])
+  }
+
+  useEffect(reload, [])
 
   if (error) return <div className="error" style={{ padding: 24 }}>{error}</div>
   if (!data) return <div className="empty">Chargement…</div>
+
+  const docTypeById = Object.fromEntries(docTypes.map((dt) => [dt.id, dt]))
+
+  function openUpload(driver, cell) {
+    setUploadCtx({
+      driver,
+      docType: docTypeById[cell.document_type_id] || data.doc_types.find((d) => d.id === cell.document_type_id),
+      currentVersionId: cell.current_version_id,
+    })
+  }
 
   return (
     <>
@@ -162,7 +180,11 @@ function DashboardView() {
                     <strong>{d.nom}</strong> {d.prenom}
                   </td>
                   {d.cells.map((c) => (
-                    <MatrixCell key={c.document_type_id} cell={c} />
+                    <MatrixCell
+                      key={c.document_type_id}
+                      cell={c}
+                      onClick={() => openUpload(d, c)}
+                    />
                   ))}
                 </tr>
               ))}
@@ -170,7 +192,160 @@ function DashboardView() {
           </table>
         </div>
       )}
+
+      {uploadCtx && (
+        <UploadModal
+          driver={uploadCtx.driver}
+          docType={uploadCtx.docType}
+          currentVersionId={uploadCtx.currentVersionId}
+          onClose={() => setUploadCtx(null)}
+          onUploaded={() => {
+            setUploadCtx(null)
+            reload()
+          }}
+        />
+      )}
     </>
+  )
+}
+
+function UploadModal({ driver, docType, currentVersionId, onClose, onUploaded }) {
+  const [file, setFile] = useState(null)
+  const [dateEmission, setDateEmission] = useState('')
+  const [datePeremption, setDatePeremption] = useState('')
+  const [peremptionTouched, setPeremptionTouched] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [downloading, setDownloading] = useState(false)
+  const [error, setError] = useState('')
+
+  function handleEmissionChange(value) {
+    setDateEmission(value)
+    if (!peremptionTouched && value && docType?.duree_validite_jours_default) {
+      const d = new Date(value)
+      d.setDate(d.getDate() + docType.duree_validite_jours_default)
+      const iso = d.toISOString().slice(0, 10)
+      setDatePeremption(iso)
+    }
+  }
+
+  function handlePeremptionChange(value) {
+    setPeremptionTouched(true)
+    setDatePeremption(value)
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    setError('')
+    if (!file) {
+      setError('Selectionne un fichier PDF')
+      return
+    }
+    setUploading(true)
+    try {
+      await api.documents.upload({
+        driverId: driver.id,
+        documentTypeId: docType.id,
+        dateEmission,
+        datePeremption,
+        file,
+      })
+      onUploaded()
+    } catch (err) {
+      setError(err.detail || 'Erreur lors de l\'upload')
+      setUploading(false)
+    }
+  }
+
+  async function handleDownload() {
+    if (!currentVersionId) return
+    setDownloading(true)
+    try {
+      await api.documents.openInNewTab(currentVersionId)
+    } catch (err) {
+      setError(err.detail || 'Erreur lors du telechargement')
+    } finally {
+      setDownloading(false)
+    }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <form className="modal-card" onClick={(e) => e.stopPropagation()} onSubmit={handleSubmit}>
+        <header className="modal-header">
+          <h2>Document — {docType?.libelle}</h2>
+          <button type="button" className="icon-btn" onClick={onClose} aria-label="Fermer">×</button>
+        </header>
+
+        <div className="modal-body">
+          <p className="hint">
+            <strong>{driver.nom} {driver.prenom}</strong>
+            {' · '}{docType?.code}
+          </p>
+
+          {currentVersionId && (
+            <div className="info-block">
+              <span>Une version est deja en base.</span>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={handleDownload}
+                disabled={downloading}
+              >
+                {downloading ? '…' : 'Telecharger la version actuelle'}
+              </button>
+            </div>
+          )}
+
+          <div className="section">
+            <h3>{currentVersionId ? 'Nouvelle version' : 'Premier upload'}</h3>
+            <p className="hint">
+              Toute nouvelle version remplace l'actuelle dans le tableau de bord.
+              L'ancienne reste archivee en base (jamais d'ecrasement).
+            </p>
+
+            <div className="field">
+              <label>Fichier (PDF, max 10 MB) *</label>
+              <input
+                type="file"
+                accept="application/pdf"
+                onChange={(e) => setFile(e.target.files?.[0] || null)}
+                required
+              />
+            </div>
+
+            <div className="grid-2">
+              <div className="field">
+                <label>Date d'emission *</label>
+                <input
+                  type="date"
+                  value={dateEmission}
+                  onChange={(e) => handleEmissionChange(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="field">
+                <label>Date de peremption *</label>
+                <input
+                  type="date"
+                  value={datePeremption}
+                  onChange={(e) => handlePeremptionChange(e.target.value)}
+                  required
+                />
+              </div>
+            </div>
+          </div>
+
+          {error && <div className="error">{error}</div>}
+        </div>
+
+        <footer className="modal-footer">
+          <button type="button" className="btn btn-ghost" onClick={onClose}>Annuler</button>
+          <button type="submit" className="btn" disabled={uploading}>
+            {uploading ? 'Envoi…' : 'Uploader'}
+          </button>
+        </footer>
+      </form>
+    </div>
   )
 }
 
@@ -511,7 +686,7 @@ export default function App() {
     <>
       <NavBar view={view} onChangeView={setView} me={me} onLogout={handleLogout} />
       <main className="dashboard">
-        {view === 'dashboard' && <DashboardView />}
+        {view === 'dashboard' && <DashboardView docTypes={docTypes} />}
         {view === 'drivers' && <DriversView docTypes={docTypes} />}
       </main>
     </>

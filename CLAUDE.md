@@ -34,7 +34,7 @@ Module 1MDP de suivi des habilitations des dépanneurs (B2XL, CACES, permis, car
 |---|---|---|
 | 1 | Schéma Postgres + scaffold FastAPI + auth admin + CRUD basics | ✅ livré |
 | 2 | Frontend React + endpoint `GET /dashboard` (matrice + statuts) | ✅ livré (2026-05-14) |
-| 3 | Upload admin de documents (avec chiffrement Fernet) | à faire |
+| 3 | Upload admin de documents (avec chiffrement Fernet) | ✅ livré (2026-05-14) |
 | 4 | Flux dépanneur (demande → magic link → upload) | à faire |
 | 5 | Validation admin (pending → validated/rejected) | à faire |
 | 6 | Relances automatiques (n8n) | à faire |

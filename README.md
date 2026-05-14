@@ -74,6 +74,8 @@ Front dispo sur http://localhost:5173. Vite proxie automatiquement `/api/*` vers
 - `GET /api/document-types`
 - `GET /api/requirements/driver/{driver_id}`, `POST /api/requirements`, `DELETE /api/requirements/{id}`
 - `GET /api/dashboard` — matrice depanneurs × types avec statut colore par cellule
+- `POST /api/documents/upload` — upload PDF (admin) pour un (driver, doc_type) applicable, chiffre en Fernet, cree DocumentVersion validated
+- `GET /api/documents/{version_id}/download` — telecharge la version dechiffree (admin uniquement)
 
 ## Deploiement (VPS Hetzner)
 

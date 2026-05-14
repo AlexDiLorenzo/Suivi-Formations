@@ -115,6 +115,7 @@ class DashboardCell(BaseModel):
     reason: CellRedReason | None = None
     date_peremption: date | None = None
     days_until_expiry: int | None = None
+    current_version_id: UUID | None = None
 
 
 class DashboardDriver(BaseModel):
@@ -141,3 +142,17 @@ class DashboardResponse(BaseModel):
     doc_types: list[DashboardDocType]
     drivers: list[DashboardDriver]
     summary: DashboardSummary
+
+
+class DocumentVersionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    document_id: UUID
+    original_filename: str
+    mime_type: str
+    file_size_bytes: int
+    date_emission: date
+    date_peremption: date
+    uploaded_by: str
+    uploaded_at: datetime
+    statut: str

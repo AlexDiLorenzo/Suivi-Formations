@@ -28,6 +28,8 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       FILE_ENCRYPTION_KEY: ${FILE_ENCRYPTION_KEY}
       CORS_ORIGINS: ${CORS_ORIGINS}
+      REMINDERS_SECRET: ${REMINDERS_SECRET}
+      FRONTEND_BASE_URL: ${FRONTEND_BASE_URL}
       ENV: prod
     volumes:
       - documents_data:/var/lib/habilitation/documents

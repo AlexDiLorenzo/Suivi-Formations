@@ -83,6 +83,90 @@ Front dispo sur http://localhost:5173. Vite proxie automatiquement `/api/*` vers
 - `POST /api/documents/{version_id}/validate` — admin : pending -> validated, devient current_version
 - `POST /api/documents/{version_id}/reject` body `{reason}` — admin : pending -> rejected (motif obligatoire)
 
+### Endpoints internes (auth header `X-Internal-Secret: $REMINDERS_SECRET`)
+
+- `GET  /api/internal/reminders/due` — calcule les rappels du jour, cree
+  les `Reminder` (sent_at=null) + `DocumentRequest` + magic_link, et
+  retourne `{items: [...], skipped: [...]}`. Idempotent dans la journee.
+- `POST /api/internal/reminders/mark-sent` body `{reminder_ids: [uuid, ...]}`
+  — appele par n8n apres l'envoi des emails pour cocher `sent_at`.
+
+## Workflow n8n (etape 6 : relances)
+
+n8n est l'orchestrateur (cron + envoi email via son propre node SMTP/
+Brevo). Le backend fournit la liste de qui relancer et l'audit du
+sent_at. Pre-requis : `REMINDERS_SECRET` et `FRONTEND_BASE_URL` dans le
+`.env` du backend, **redemarrer le service** apres modification.
+
+### Flux
+
+```
+[Cron Trigger] (tous les jours a 8h00)
+    |
+    v
+[HTTP Request] GET https://formations.alex-worksmart.com/api/internal/reminders/due
+    Headers: X-Internal-Secret: <REMINDERS_SECRET>
+    |
+    v
+[Loop Over Items] sur "items"
+    |
+    v
+[Email Send] (Brevo / SMTP)
+    To: {{ $json.driver_email }}
+    Subject: Habilitation {{ $json.document_type_libelle }} a renouveler
+    Body: HTML avec {{ $json.magic_link }} comme bouton
+    |
+    v (apres la boucle)
+[HTTP Request] POST .../api/internal/reminders/mark-sent
+    Headers: X-Internal-Secret: <...>
+    Body JSON: { "reminder_ids": [tous les reminder_id de la batch] }
+```
+
+### Exemple de reponse `GET /api/internal/reminders/due`
+
+```json
+{
+  "items": [
+    {
+      "reminder_id": "fc1a...",
+      "type": "j_minus_30",
+      "driver_email": "marc.aubert@example.com",
+      "driver_prenom": "Marc",
+      "driver_nom": "Aubert",
+      "document_type_code": "B2XL",
+      "document_type_libelle": "B2XL (permis poids lourd)",
+      "days_until_expiry": 30,
+      "date_peremption": "2026-06-13",
+      "magic_link": "https://formations.alex-worksmart.com/upload/abcdef...",
+      "magic_link_expires_at": "2026-05-21T08:00:00+00:00"
+    }
+  ],
+  "skipped": [
+    { "driver_id": "...", "driver_nom": "Lucie Bernard",
+      "document_type_code": "PERMIS", "type": "never_received",
+      "reason": "no_email" }
+  ]
+}
+```
+
+Les `type` possibles : `j_minus_90`, `j_minus_30`, `j_minus_7`,
+`never_received`. Adapte le sujet et le corps de l'email selon le type
+(par ex. "Premier envoi" pour never_received vs "Renouvellement urgent"
+pour j_minus_7).
+
+### Test manuel sans n8n (depuis ton poste)
+
+```bash
+curl -H "X-Internal-Secret: $REMINDERS_SECRET" \
+     https://formations.alex-worksmart.com/api/internal/reminders/due | jq
+```
+
+Important : **chaque appel reussi cree des Reminder en base** (pour
+l'idempotence intra-journee). Si tu testes plusieurs fois dans la meme
+journee, le 2eme appel renverra `items: []` car deja deduplique. Pour
+re-tester, supprimer les Reminder du jour en base ou attendre le
+lendemain.
+
 ## Deploiement (VPS Hetzner)
 
 L'app tourne sur le VPS dans `/srv/habilitation/`, derriere Traefik (`/srv/stack/`)

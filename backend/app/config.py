@@ -17,6 +17,19 @@ class Settings(BaseSettings):
     documents_storage_path: str = "/var/lib/habilitation/documents"
     orange_threshold_days: int = 90
 
+    # Secret partage avec n8n pour les endpoints internes (relances).
+    # Si vide, les endpoints internes sont desactives.
+    reminders_secret: str = ""
+
+    # Base URL du frontend, utilisee pour construire les magic_link
+    # dans les emails de relance (n8n appelle l'API mais le mail doit
+    # pointer vers le frontend).
+    frontend_base_url: str = "http://localhost:5173"
+
+    # Cadence des relances "jamais transmis" (en jours).
+    never_received_grace_days: int = 7
+    never_received_interval_days: int = 7
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

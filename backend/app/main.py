@@ -9,6 +9,7 @@ from app.routers import (
     document_types,
     documents,
     drivers,
+    internal,
     requirements,
 )
 
@@ -48,3 +49,4 @@ app.include_router(
     prefix="/api/public/document-requests",
     tags=["public"],
 )
+app.include_router(internal.router, prefix="/api/internal", tags=["internal"])

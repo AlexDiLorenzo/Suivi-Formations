@@ -185,3 +185,34 @@ class PublicDocumentRequestInfo(BaseModel):
     document_type_libelle: str
     duree_validite_jours_default: int | None
     expires_at: datetime
+
+
+class DueReminderItem(BaseModel):
+    reminder_id: UUID
+    type: str
+    driver_email: EmailStr
+    driver_prenom: str
+    driver_nom: str
+    document_type_code: str
+    document_type_libelle: str
+    days_until_expiry: int | None
+    date_peremption: date | None
+    magic_link: str
+    magic_link_expires_at: datetime
+
+
+class MarkSentRequest(BaseModel):
+    reminder_ids: list[UUID]
+
+
+class SkippedReminderItem(BaseModel):
+    driver_id: UUID
+    driver_nom: str
+    document_type_code: str
+    type: str
+    reason: str
+
+
+class DueRemindersResponse(BaseModel):
+    items: list[DueReminderItem]
+    skipped: list[SkippedReminderItem]

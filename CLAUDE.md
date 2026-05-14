@@ -37,7 +37,7 @@ Module 1MDP de suivi des habilitations des dépanneurs (B2XL, CACES, permis, car
 | 3 | Upload admin de documents (avec chiffrement Fernet) | ✅ livré (2026-05-14) |
 | 4 | Flux dépanneur (demande → magic link → upload) | ✅ livré (2026-05-14, sans envoi email — link copiable côté admin) |
 | 5 | Validation admin (pending → validated/rejected) | ✅ livré (2026-05-14) |
-| 6 | Relances automatiques (n8n) | à faire |
+| 6 | Relances automatiques (n8n) | ✅ livré (2026-05-14, côté backend ; workflow n8n à monter par Alexandre) |
 | 7 | Historique versions + export PDF "état à date T" | à faire |
 | 8 | RGPD : purge configurable post-départ, log d'accès | à faire |
 | 9 | Déploiement prod (sous-domaine, TLS, sauvegardes) | 🟡 backend en ligne sur https://formations.alex-worksmart.com (TLS OK), sauvegardes Postgres restant à mettre en place |

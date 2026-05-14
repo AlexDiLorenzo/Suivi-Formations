@@ -28,6 +28,8 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       FILE_ENCRYPTION_KEY: ${FILE_ENCRYPTION_KEY}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+      REMINDERS_SECRET: ${REMINDERS_SECRET:-}
+      FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-http://localhost:5173}
       ENV: ${ENV:-dev}
     ports:
       - "8000:8000"

@@ -4,12 +4,15 @@ Module 1MDP de suivi des habilitations des depanneurs (B2XL, CACES, permis, cart
 
 ## Stack
 
-- Backend : FastAPI + SQLAlchemy + Alembic + PostgreSQL
+- Backend : FastAPI + SQLAlchemy + Alembic + PostgreSQL (toutes les routes prefixees par `/api`)
+- Frontend : React 18 + Vite, servi en prod par nginx (qui proxie aussi `/api/*` vers le backend)
 - Auth admin : JWT + TOTP (2FA optionnel)
 - Stockage fichiers : filesystem chiffre (Fernet) — utilise des l'etape 3
-- Orchestration locale : docker compose
+- Orchestration : docker compose (dev = `docker-compose.yml`, prod VPS = `docker-compose.prod.yml`)
 
 ## Demarrage local
+
+### Backend + Postgres (Docker)
 
 1. Copier `.env.example` vers `.env`, puis generer les secrets :
 
@@ -37,30 +40,50 @@ Module 1MDP de suivi des habilitations des depanneurs (B2XL, CACES, permis, cart
 4. Creer un premier admin :
 
    ```
-   docker compose exec backend python -m scripts.create_admin --email vous@1mdp.fr --name "Votre Nom" --password "..."
+   docker compose exec backend python -m scripts.create_admin \
+       --email <VOTRE_EMAIL> --name "<VOTRE_NOM>" --password '<MOT_DE_PASSE>'
    ```
 
-5. API sur http://localhost:8000 — doc OpenAPI sur http://localhost:8000/docs
+5. (Optionnel, pour visualiser le tableau de bord avec de la fake data) seed demo :
 
-## Endpoints disponibles (etape 1)
+   ```
+   docker compose exec backend python -m scripts.seed_demo
+   ```
 
-- `POST /auth/login` — email + password (+ totp_code si 2FA active)
-- `GET /auth/me` — profil admin courant
-- `POST /auth/totp/setup` — initie l'enrolement TOTP (renvoie le QR code en data URI)
-- `POST /auth/totp/enable` — confirme avec un code pour activer le 2FA
-- `GET /drivers` — liste des depanneurs
-- `POST /drivers` — creation
-- `GET /drivers/{id}` / `PATCH /drivers/{id}` / `POST /drivers/{id}/archive`
-- `GET /document-types` — liste des 4 types MVP
-- `GET /requirements/driver/{driver_id}` — exigences applicables a un depanneur
-- `POST /requirements` — cocher une exigence pour un depanneur
-- `DELETE /requirements/{id}` — decocher
+   Cree 3 depanneurs avec des cellules de chaque couleur. **Ne pas executer en prod.**
+
+6. API sur http://localhost:8000 (endpoints sous `/api/...`) — doc OpenAPI sur http://localhost:8000/docs
+
+### Frontend (Vite, hors Docker en dev)
+
+```
+cd frontend
+npm install
+npm run dev
+```
+
+Front dispo sur http://localhost:5173. Vite proxie automatiquement `/api/*` vers
+`http://localhost:8000`, donc pas de souci de CORS.
+
+## Endpoints disponibles
+
+- `POST /api/auth/login` — email + password (+ totp_code si 2FA active)
+- `GET  /api/auth/me` — profil admin courant
+- `POST /api/auth/totp/setup` / `POST /api/auth/totp/enable` — enrolement TOTP
+- `GET/POST /api/drivers`, `GET/PATCH /api/drivers/{id}`, `POST /api/drivers/{id}/archive`
+- `GET /api/document-types`
+- `GET /api/requirements/driver/{driver_id}`, `POST /api/requirements`, `DELETE /api/requirements/{id}`
+- `GET /api/dashboard` — matrice depanneurs × types avec statut colore par cellule
 
 ## Deploiement (VPS Hetzner)
 
 L'app tourne sur le VPS dans `/srv/habilitation/`, derriere Traefik (`/srv/stack/`)
 qui gere TLS auto (Cloudflare DNS challenge). Domaine :
 `https://formations.alex-worksmart.com`.
+
+Architecture en prod : Traefik → service `frontend` (nginx) qui sert le SPA et
+proxie `/api/*` vers le service `backend` (FastAPI). Le backend n'est PAS expose
+directement par Traefik.
 
 ### Bootstrap initial (a faire une seule fois)
 
@@ -87,7 +110,7 @@ qui gere TLS auto (Cloudflare DNS challenge). Domaine :
    ```
 
    Les migrations Alembic s'appliquent automatiquement. Traefik detecte
-   le service via les labels et expose le domaine en HTTPS.
+   le service `frontend` via les labels et expose le domaine en HTTPS.
 
 5. **Seed des types de documents + creation admin** :
 

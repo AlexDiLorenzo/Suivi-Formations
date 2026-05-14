@@ -34,6 +34,15 @@ services:
     command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     networks:
       - habilitation-net
+
+  frontend:
+    build: ./frontend
+    container_name: habilitation-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    networks:
+      - habilitation-net
       - web
     labels:
       - "traefik.enable=true"
@@ -42,7 +51,7 @@ services:
       - "traefik.http.routers.habilitation.entrypoints=websecure"
       - "traefik.http.routers.habilitation.tls=true"
       - "traefik.http.routers.habilitation.tls.certresolver=le"
-      - "traefik.http.services.habilitation.loadbalancer.server.port=8000"
+      - "traefik.http.services.habilitation.loadbalancer.server.port=80"
 
 volumes:
   postgres_data:

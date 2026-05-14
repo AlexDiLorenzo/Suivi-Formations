@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from enum import Enum
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
@@ -89,3 +90,49 @@ class RequirementOut(BaseModel):
     document_type_id: UUID
     required_since: date
     created_at: datetime
+
+
+class CellStatus(str, Enum):
+    GREEN = "green"
+    ORANGE = "orange"
+    RED = "red"
+    GREY = "grey"
+
+
+class CellRedReason(str, Enum):
+    EXPIRED = "expired"
+    NEVER_RECEIVED = "never_received"
+
+
+class DashboardCell(BaseModel):
+    document_type_id: UUID
+    status: CellStatus
+    reason: CellRedReason | None = None
+    date_peremption: date | None = None
+    days_until_expiry: int | None = None
+
+
+class DashboardDriver(BaseModel):
+    id: UUID
+    prenom: str
+    nom: str
+    statut: str
+    cells: list[DashboardCell]
+
+
+class DashboardDocType(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    code: str
+    libelle: str
+    display_order: int
+
+
+class DashboardSummary(BaseModel):
+    by_status: dict[CellStatus, int]
+
+
+class DashboardResponse(BaseModel):
+    doc_types: list[DashboardDocType]
+    drivers: list[DashboardDriver]
+    summary: DashboardSummary

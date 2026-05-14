@@ -4,12 +4,12 @@ Module 1MDP de suivi des habilitations des dépanneurs (B2XL, CACES, permis, car
 
 ## Stack
 
-- **Backend** : FastAPI + SQLAlchemy 2.0 + Alembic + PostgreSQL 16
+- **Backend** : FastAPI + SQLAlchemy 2.0 + Alembic + PostgreSQL 16. **Toutes les routes sont préfixées par `/api`** (servies sous le même domaine que le frontend via le proxy nginx).
 - **Auth admin** : JWT (python-jose) + bcrypt + TOTP (pyotp, optionnel)
 - **Stockage fichiers** (dès étape 3) : filesystem chiffré Fernet
 - **Relances** (étape 6) : n8n appelle le backend (cron)
-- **Frontend** (dès étape 2) : React + Vite, déployé Cloudflare Pages
-- **Hébergement prod** (étape 9) : VPS Hetzner Ubuntu
+- **Frontend** : React 18 + Vite (single-file `src/App.jsx` à la DepanTime). En prod, servi par nginx qui proxie aussi `/api/*` vers le backend (un seul domaine, pas de CORS).
+- **Hébergement prod** : VPS Hetzner Ubuntu, voir [memory reference-vps]
 
 ## Périmètre MVP (figé au cadrage)
 
@@ -33,7 +33,7 @@ Module 1MDP de suivi des habilitations des dépanneurs (B2XL, CACES, permis, car
 | # | Étape | Statut |
 |---|---|---|
 | 1 | Schéma Postgres + scaffold FastAPI + auth admin + CRUD basics | ✅ livré |
-| 2 | Frontend React + endpoint `GET /dashboard` (matrice + statuts) | ⏳ suivant |
+| 2 | Frontend React + endpoint `GET /dashboard` (matrice + statuts) | ✅ livré (2026-05-14) |
 | 3 | Upload admin de documents (avec chiffrement Fernet) | à faire |
 | 4 | Flux dépanneur (demande → magic link → upload) | à faire |
 | 5 | Validation admin (pending → validated/rejected) | à faire |
@@ -56,6 +56,9 @@ Module 1MDP de suivi des habilitations des dépanneurs (B2XL, CACES, permis, car
 - **bcrypt 72 octets** : `hash_password` lève `ValueError` si le password encodé UTF-8 dépasse 72 octets. Limite native de bcrypt, pas un bug.
 - **Migrations auto au démarrage** : `docker-compose.yml` lance `alembic upgrade head` avant `uvicorn`. Toute migration commitée s'applique au prochain `docker compose up`.
 - **JWT subject = UUID** : `payload["sub"]` est une string ; `db.get(AdminUser, payload["sub"])` fonctionne grâce à la conversion automatique de SQLAlchemy/psycopg.
+- **Préfixe `/api` côté FastAPI** : toutes les routes sont déclarées sous `/api/...` dans `app/main.py`. Le frontend tape `/api/...` directement, et nginx proxie côté prod. Si tu ajoutes un router, n'oublie pas le préfixe `/api/...`.
+- **`current_version` peut pointer vers une `pending`** en théorie. Le calcul du dashboard filtre explicitement sur `statut == VALIDATED` pour éviter qu'une version pas encore validée soit considérée comme la version active.
+- **Traefik certresolver = `le`** (pas `cloudflare`). Cf [memory reference-vps].
 
 ## Commandes utiles
 
@@ -68,6 +71,12 @@ docker compose logs -f backend
 
 # Seed des 4 types de documents
 docker compose exec backend python -m scripts.seed_doctypes
+
+# Seed demo (3 dépanneurs avec cellules de chaque couleur — DEV UNIQUEMENT)
+docker compose exec backend python -m scripts.seed_demo
+
+# Frontend en dev (hors Docker)
+cd frontend && npm install && npm run dev   # http://localhost:5173
 
 # Création d'un admin
 docker compose exec backend python -m scripts.create_admin --email a@1mdp.fr --name "X" --password "..."

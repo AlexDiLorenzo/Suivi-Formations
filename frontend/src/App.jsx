@@ -110,18 +110,22 @@ function SummaryBar({ summary }) {
 }
 
 function MatrixCell({ cell, onClick }) {
-  const sub = cellSubLabel(cell)
   const clickable = cell.status !== 'grey'
+  const pending = cell.has_pending_version
+  const visualStatus = pending ? 'pending' : cell.status
+  const sub = pending ? 'A valider' : cellSubLabel(cell)
+  const tooltip = pending
+    ? 'Version en attente de validation — clique pour valider'
+    : clickable
+      ? 'Cliquer pour uploader / consulter'
+      : 'Non applicable'
   return (
     <td
-      className={`cell ${cell.status} ${clickable ? 'clickable' : ''}`}
+      className={`cell ${visualStatus} ${clickable ? 'clickable' : ''}`}
       onClick={clickable ? onClick : undefined}
-      title={clickable ? 'Cliquer pour uploader / consulter' : 'Non applicable'}
+      title={tooltip}
     >
-      {cell.has_pending_version && (
-        <span className="pending-dot" title="Une version est en attente de validation">●</span>
-      )}
-      {cell.status === 'grey' ? (
+      {cell.status === 'grey' && !pending ? (
         <span>—</span>
       ) : (
         <>
@@ -706,6 +710,27 @@ function DriversView({ docTypes }) {
     }
   }
 
+  async function handleBulkRequest(driver) {
+    const ok = confirm(
+      `Envoyer une demande pour tous les documents manquants ou perimes de ${driver.prenom} ${driver.nom} ?\n\n` +
+      `Si ${driver.prenom} a un email enregistre, un mail recap sera envoye automatiquement.`
+    )
+    if (!ok) return
+    try {
+      const r = await api.documentRequests.bulk(driver.id)
+      if (r.count === 0) {
+        alert(r.email_error || 'Aucun document a demander')
+        return
+      }
+      const emailLine = r.email_sent
+        ? `\n\nEmail envoye a ${r.driver_email}.`
+        : `\n\n${r.email_error || 'Email non envoye.'} Liens disponibles dans le retour API.`
+      alert(`${r.count} demande(s) creee(s).${emailLine}`)
+    } catch (err) {
+      alert(err.detail || 'Erreur lors de l\'envoi des demandes')
+    }
+  }
+
   const docTypeById = Object.fromEntries(docTypes.map((dt) => [dt.id, dt]))
 
   return (
@@ -778,6 +803,15 @@ function DriversView({ docTypes }) {
                     <button className="btn btn-ghost btn-sm" onClick={() => setEditing(d)}>
                       Editer
                     </button>
+                    {d.statut !== 'archived' && d.required_document_type_ids.length > 0 && (
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => handleBulkRequest(d)}
+                        title="Envoyer une demande pour tous les docs manquants ou perimes"
+                      >
+                        Envoyer demandes
+                      </button>
+                    )}
                     {d.statut !== 'archived' && (
                       <button className="btn btn-ghost btn-sm danger" onClick={() => handleArchive(d)}>
                         Archiver

@@ -21,9 +21,12 @@ from app.models import (
     DriverStatus,
     UploadedBy,
 )
-from app.mailer import send_magic_link_email
+from app.mailer import send_bulk_request_email, send_magic_link_email
 from app.routers.documents import MAX_FILE_BYTES, PDF_MAGIC
 from app.schemas import (
+    BulkDocumentRequestCreate,
+    BulkDocumentRequestResult,
+    BulkRequestItem,
     DocumentRequestCreate,
     DocumentRequestCreated,
     PublicDocumentRequestInfo,
@@ -137,6 +140,123 @@ def create_request(
         driver_email=driver.email,
         email_sent=email_sent,
         email_error=email_error,
+    )
+
+
+@admin_router.post("/bulk", response_model=BulkDocumentRequestResult)
+def create_bulk_request(
+    payload: BulkDocumentRequestCreate,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    current_admin: Annotated[AdminUser, Depends(get_current_admin)],
+):
+    """Genere une demande pour TOUS les documents 'rouges' du depanneur :
+    applicabilites cochees sans current_version validated, OU avec
+    current_version perimee. Envoie 1 mail recap avec un lien par doc."""
+    driver = db.get(Driver, payload.driver_id)
+    if not driver:
+        raise HTTPException(status_code=404, detail="Depanneur introuvable")
+    if driver.statut != DriverStatus.ACTIVE.value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Le depanneur n'est pas actif",
+        )
+
+    today = date.today()
+    requirements = (
+        db.query(DriverRequiredDocument)
+        .filter(DriverRequiredDocument.driver_id == driver.id)
+        .all()
+    )
+    if not requirements:
+        return BulkDocumentRequestResult(
+            count=0,
+            driver_email=driver.email,
+            email_sent=False,
+            email_error="Aucune applicabilite cochee pour ce depanneur",
+            items=[],
+        )
+
+    current_by_doc_type: dict[UUID, DocumentVersion] = {}
+    for doc, ver in (
+        db.query(Document, DocumentVersion)
+        .outerjoin(DocumentVersion, Document.current_version_id == DocumentVersion.id)
+        .filter(Document.driver_id == driver.id)
+        .all()
+    ):
+        if ver and ver.statut == DocumentVersionStatus.VALIDATED.value:
+            current_by_doc_type[doc.document_type_id] = ver
+
+    red_doc_type_ids: list[UUID] = []
+    for req in requirements:
+        current = current_by_doc_type.get(req.document_type_id)
+        if current is None or current.date_peremption < today:
+            red_doc_type_ids.append(req.document_type_id)
+
+    if not red_doc_type_ids:
+        return BulkDocumentRequestResult(
+            count=0,
+            driver_email=driver.email,
+            email_sent=False,
+            email_error="Aucun document a demander (tout est a jour)",
+            items=[],
+        )
+
+    doc_types_map = {
+        dt.id: dt
+        for dt in db.query(DocumentType)
+        .filter(DocumentType.id.in_(red_doc_type_ids))
+        .all()
+    }
+
+    expires_at = datetime.now(timezone.utc) + timedelta(days=REQUEST_TTL_DAYS)
+    base_url = _frontend_base(request)
+
+    items: list[BulkRequestItem] = []
+    for dt_id in red_doc_type_ids:
+        dt = doc_types_map.get(dt_id)
+        if not dt:
+            continue
+        token = secrets.token_urlsafe(32)
+        db.add(
+            DocumentRequest(
+                driver_id=driver.id,
+                document_type_id=dt_id,
+                token_hash=_hash_token(token),
+                expires_at=expires_at,
+                created_by_admin_id=current_admin.id,
+            )
+        )
+        magic_link = f"{base_url}/upload/{token}"
+        items.append(
+            BulkRequestItem(
+                document_type_id=dt_id,
+                document_type_code=dt.code,
+                document_type_libelle=dt.libelle,
+                magic_link=magic_link,
+            )
+        )
+
+    db.commit()
+
+    email_sent = False
+    email_error: str | None = None
+    if driver.email:
+        email_sent, email_error = send_bulk_request_email(
+            to=driver.email,
+            driver_prenom=driver.prenom,
+            items=[(it.document_type_libelle, it.magic_link) for it in items],
+            expires_at=expires_at,
+        )
+    else:
+        email_error = "Le depanneur n'a pas d'email enregistre"
+
+    return BulkDocumentRequestResult(
+        count=len(items),
+        driver_email=driver.email,
+        email_sent=email_sent,
+        email_error=email_error,
+        items=items,
     )
 
 

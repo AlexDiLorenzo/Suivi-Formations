@@ -127,6 +127,11 @@ export const api = {
         method: 'POST',
         body: { driver_id: driverId, document_type_id: documentTypeId },
       }),
+    bulk: (driverId) =>
+      request('/document-requests/bulk', {
+        method: 'POST',
+        body: { driver_id: driverId },
+      }),
   },
   publicRequests: {
     get: (token) => request(`/public/document-requests/${token}`, { auth: false }),

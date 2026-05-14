@@ -274,6 +274,18 @@ td.cell.green  { background: var(--c-status-green); }
 td.cell.orange { background: var(--c-status-orange); }
 td.cell.red    { background: var(--c-status-red); }
 td.cell.grey   { background: var(--c-status-grey); color: var(--c-text-muted); }
+td.cell.pending {
+  background: var(--c-accent);
+  color: var(--c-black);
+  position: relative;
+}
+td.cell.pending::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 2px dashed rgba(26, 25, 15, 0.35);
+  pointer-events: none;
+}
 
 td.cell.clickable {
   cursor: pointer;
@@ -281,23 +293,9 @@ td.cell.clickable {
 }
 
 td.cell.clickable:hover {
-  filter: brightness(1.12);
-  outline: 2px solid rgba(228, 225, 60, 0.6);
+  filter: brightness(1.08);
+  outline: 2px solid rgba(26, 25, 15, 0.5);
   outline-offset: -2px;
-}
-
-.pending-dot {
-  position: absolute;
-  top: 4px;
-  right: 6px;
-  color: var(--c-accent);
-  font-size: 16px;
-  line-height: 1;
-  text-shadow: 0 0 3px rgba(0, 0, 0, 0.4);
-}
-
-td.cell {
-  position: relative;
 }
 
 td.cell .date {

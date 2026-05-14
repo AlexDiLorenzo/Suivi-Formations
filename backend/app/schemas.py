@@ -181,6 +181,25 @@ class DocumentRequestCreated(BaseModel):
     email_error: str | None = None
 
 
+class BulkDocumentRequestCreate(BaseModel):
+    driver_id: UUID
+
+
+class BulkRequestItem(BaseModel):
+    document_type_id: UUID
+    document_type_code: str
+    document_type_libelle: str
+    magic_link: str
+
+
+class BulkDocumentRequestResult(BaseModel):
+    count: int
+    driver_email: EmailStr | None = None
+    email_sent: bool = False
+    email_error: str | None = None
+    items: list[BulkRequestItem]
+
+
 class PublicDocumentRequestInfo(BaseModel):
     driver_prenom: str
     driver_nom: str

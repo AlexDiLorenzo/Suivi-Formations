@@ -154,6 +154,7 @@ function DashboardView({ docTypes }) {
       driver,
       docType: docTypeById[cell.document_type_id] || data.doc_types.find((d) => d.id === cell.document_type_id),
       currentVersionId: cell.current_version_id,
+      pendingVersionId: cell.pending_version_id,
     })
   }
 
@@ -201,6 +202,7 @@ function DashboardView({ docTypes }) {
           driver={uploadCtx.driver}
           docType={uploadCtx.docType}
           currentVersionId={uploadCtx.currentVersionId}
+          pendingVersionId={uploadCtx.pendingVersionId}
           onClose={() => setUploadCtx(null)}
           onUploaded={() => {
             setUploadCtx(null)
@@ -212,7 +214,7 @@ function DashboardView({ docTypes }) {
   )
 }
 
-function UploadModal({ driver, docType, currentVersionId, onClose, onUploaded }) {
+function UploadModal({ driver, docType, currentVersionId, pendingVersionId, onClose, onUploaded }) {
   const [file, setFile] = useState(null)
   const [dateEmission, setDateEmission] = useState('')
   const [datePeremption, setDatePeremption] = useState('')
@@ -223,6 +225,59 @@ function UploadModal({ driver, docType, currentVersionId, onClose, onUploaded })
   const [magicLink, setMagicLink] = useState(null)
   const [linkCopied, setLinkCopied] = useState(false)
   const [error, setError] = useState('')
+  const [pendingVersion, setPendingVersion] = useState(null)
+  const [reviewing, setReviewing] = useState(false)
+  const [downloadingPending, setDownloadingPending] = useState(false)
+
+  useEffect(() => {
+    if (!pendingVersionId) {
+      setPendingVersion(null)
+      return
+    }
+    api.documents.get(pendingVersionId).then(setPendingVersion).catch(() => {})
+  }, [pendingVersionId])
+
+  async function handleDownloadPending() {
+    setDownloadingPending(true)
+    try {
+      await api.documents.openInNewTab(pendingVersionId)
+    } catch (err) {
+      setError(err.detail || 'Erreur lors du telechargement')
+    } finally {
+      setDownloadingPending(false)
+    }
+  }
+
+  async function handleValidate() {
+    if (!confirm('Valider cette version ? Elle deviendra la version courante.')) return
+    setError('')
+    setReviewing(true)
+    try {
+      await api.documents.validate(pendingVersionId)
+      onUploaded()
+    } catch (err) {
+      setError(err.detail || 'Erreur lors de la validation')
+      setReviewing(false)
+    }
+  }
+
+  async function handleReject() {
+    const reason = prompt('Motif du rejet (sera communique au depanneur lors de la nouvelle demande) :')
+    if (reason === null) return
+    if (reason.trim().length < 3) {
+      alert('Le motif doit contenir au moins 3 caracteres.')
+      return
+    }
+    setError('')
+    setReviewing(true)
+    try {
+      await api.documents.reject(pendingVersionId, reason.trim())
+      onUploaded()
+    } catch (err) {
+      setError(err.detail || 'Erreur lors du rejet')
+      setReviewing(false)
+    }
+  }
 
   async function handleCreateRequest() {
     setError('')
@@ -314,6 +369,56 @@ function UploadModal({ driver, docType, currentVersionId, onClose, onUploaded })
             <strong>{driver.nom} {driver.prenom}</strong>
             {' · '}{docType?.code}
           </p>
+
+          {pendingVersionId && (
+            <div className="pending-block">
+              <div className="pending-header">
+                <span className="tag tag-pending">⏳ Version en attente de validation</span>
+              </div>
+              {pendingVersion ? (
+                <ul className="pending-meta">
+                  <li>
+                    Uploade par <strong>{pendingVersion.uploaded_by === 'driver' ? 'le depanneur' : 'admin'}</strong>
+                    {' '}le {formatDateFr(pendingVersion.uploaded_at.slice(0, 10))}
+                  </li>
+                  <li>
+                    Emission : <strong>{formatDateFr(pendingVersion.date_emission)}</strong>
+                    {' · '}
+                    Peremption : <strong>{formatDateFr(pendingVersion.date_peremption)}</strong>
+                  </li>
+                  <li>Fichier : {pendingVersion.original_filename} ({Math.round(pendingVersion.file_size_bytes / 1024)} ko)</li>
+                </ul>
+              ) : (
+                <p className="hint">Chargement des details…</p>
+              )}
+              <div className="pending-actions">
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={handleDownloadPending}
+                  disabled={downloadingPending}
+                >
+                  {downloadingPending ? '…' : 'Telecharger'}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  onClick={handleValidate}
+                  disabled={reviewing}
+                >
+                  Valider
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm danger"
+                  onClick={handleReject}
+                  disabled={reviewing}
+                >
+                  Rejeter
+                </button>
+              </div>
+            </div>
+          )}
 
           {currentVersionId && (
             <div className="info-block">

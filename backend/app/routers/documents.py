@@ -18,7 +18,7 @@ from app.models import (
     DriverRequiredDocument,
     UploadedBy,
 )
-from app.schemas import DocumentVersionOut
+from app.schemas import DocumentVersionOut, RejectionRequest
 from app.storage import StorageError, decrypt_and_read, encrypt_and_store
 
 
@@ -121,6 +121,14 @@ async def upload_document(
     return version
 
 
+@router.get("/{version_id}", response_model=DocumentVersionOut)
+def get_version(version_id: UUID, db: Annotated[Session, Depends(get_db)]):
+    version = db.get(DocumentVersion, version_id)
+    if not version:
+        raise HTTPException(status_code=404, detail="Version introuvable")
+    return version
+
+
 @router.get("/{version_id}/download")
 def download_document(version_id: UUID, db: Annotated[Session, Depends(get_db)]):
     version = db.get(DocumentVersion, version_id)
@@ -137,3 +145,54 @@ def download_document(version_id: UUID, db: Annotated[Session, Depends(get_db)])
         media_type=version.mime_type,
         headers={"Content-Disposition": f'inline; filename="{safe_name}"'},
     )
+
+
+@router.post("/{version_id}/validate", response_model=DocumentVersionOut)
+def validate_version(
+    version_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    current_admin: Annotated[AdminUser, Depends(get_current_admin)],
+):
+    version = db.get(DocumentVersion, version_id)
+    if not version:
+        raise HTTPException(status_code=404, detail="Version introuvable")
+    if version.statut != DocumentVersionStatus.PENDING.value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cette version n'est pas en attente (statut actuel : {version.statut})",
+        )
+    document = db.get(Document, version.document_id)
+    if not document:
+        raise HTTPException(status_code=404, detail="Document parent introuvable")
+
+    version.statut = DocumentVersionStatus.VALIDATED.value
+    version.validated_by_admin_id = current_admin.id
+    version.validated_at = datetime.now(timezone.utc)
+    document.current_version_id = version.id
+    db.commit()
+    db.refresh(version)
+    return version
+
+
+@router.post("/{version_id}/reject", response_model=DocumentVersionOut)
+def reject_version(
+    version_id: UUID,
+    payload: RejectionRequest,
+    db: Annotated[Session, Depends(get_db)],
+    current_admin: Annotated[AdminUser, Depends(get_current_admin)],
+):
+    version = db.get(DocumentVersion, version_id)
+    if not version:
+        raise HTTPException(status_code=404, detail="Version introuvable")
+    if version.statut != DocumentVersionStatus.PENDING.value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cette version n'est pas en attente (statut actuel : {version.statut})",
+        )
+    version.statut = DocumentVersionStatus.REJECTED.value
+    version.validated_by_admin_id = current_admin.id
+    version.validated_at = datetime.now(timezone.utc)
+    version.rejection_reason = payload.reason
+    db.commit()
+    db.refresh(version)
+    return version

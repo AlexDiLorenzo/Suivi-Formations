@@ -100,6 +100,7 @@ export const api = {
       }),
   },
   documents: {
+    get: (versionId) => request(`/documents/${versionId}`),
     upload: ({ driverId, documentTypeId, dateEmission, datePeremption, file }) => {
       const fd = new FormData()
       fd.append('driver_id', driverId)
@@ -115,6 +116,10 @@ export const api = {
       window.open(url, '_blank', 'noopener')
       setTimeout(() => URL.revokeObjectURL(url), 60_000)
     },
+    validate: (versionId) =>
+      request(`/documents/${versionId}/validate`, { method: 'POST' }),
+    reject: (versionId, reason) =>
+      request(`/documents/${versionId}/reject`, { method: 'POST', body: { reason } }),
   },
   documentRequests: {
     create: ({ driverId, documentTypeId }) =>

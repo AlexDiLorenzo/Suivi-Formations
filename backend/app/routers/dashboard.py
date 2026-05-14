@@ -1,6 +1,7 @@
 from collections import Counter
 from datetime import date, timedelta
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
@@ -65,15 +66,15 @@ def get_dashboard(db: Annotated[Session, Depends(get_db)]):
         and version.statut == DocumentVersionStatus.VALIDATED.value
     }
 
-    pending_pairs: set[tuple] = {
-        (doc.driver_id, doc.document_type_id)
-        for doc, ver in (
-            db.query(Document, DocumentVersion)
-            .join(DocumentVersion, DocumentVersion.document_id == Document.id)
-            .filter(DocumentVersion.statut == DocumentVersionStatus.PENDING.value)
-            .all()
-        )
-    }
+    pending_by_pair: dict[tuple, UUID] = {}
+    for doc, ver in (
+        db.query(Document, DocumentVersion)
+        .join(DocumentVersion, DocumentVersion.document_id == Document.id)
+        .filter(DocumentVersion.statut == DocumentVersionStatus.PENDING.value)
+        .order_by(DocumentVersion.uploaded_at.desc())
+        .all()
+    ):
+        pending_by_pair.setdefault((doc.driver_id, doc.document_type_id), ver.id)
 
     counter: Counter = Counter()
     out_drivers: list[DashboardDriver] = []
@@ -81,7 +82,8 @@ def get_dashboard(db: Annotated[Session, Depends(get_db)]):
     for driver in drivers:
         cells: list[DashboardCell] = []
         for dt in doc_types:
-            has_pending = (driver.id, dt.id) in pending_pairs
+            pending_id = pending_by_pair.get((driver.id, dt.id))
+            has_pending = pending_id is not None
             if (driver.id, dt.id) not in applicable_set:
                 cells.append(DashboardCell(document_type_id=dt.id, status=CellStatus.GREY))
                 counter[CellStatus.GREY] += 1
@@ -95,6 +97,7 @@ def get_dashboard(db: Annotated[Session, Depends(get_db)]):
                         status=CellStatus.RED,
                         reason=CellRedReason.NEVER_RECEIVED,
                         has_pending_version=has_pending,
+                        pending_version_id=pending_id,
                     )
                 )
                 counter[CellStatus.RED] += 1
@@ -120,6 +123,7 @@ def get_dashboard(db: Annotated[Session, Depends(get_db)]):
                     days_until_expiry=days,
                     current_version_id=current.id,
                     has_pending_version=has_pending,
+                    pending_version_id=pending_id,
                 )
             )
             counter[status_value] += 1

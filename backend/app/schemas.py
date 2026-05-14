@@ -117,6 +117,7 @@ class DashboardCell(BaseModel):
     days_until_expiry: int | None = None
     current_version_id: UUID | None = None
     has_pending_version: bool = False
+    pending_version_id: UUID | None = None
 
 
 class DashboardDriver(BaseModel):
@@ -157,6 +158,12 @@ class DocumentVersionOut(BaseModel):
     uploaded_by: str
     uploaded_at: datetime
     statut: str
+    rejection_reason: str | None = None
+    validated_at: datetime | None = None
+
+
+class RejectionRequest(BaseModel):
+    reason: str = Field(min_length=3, max_length=1000)
 
 
 class DocumentRequestCreate(BaseModel):

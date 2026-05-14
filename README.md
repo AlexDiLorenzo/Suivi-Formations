@@ -79,6 +79,9 @@ Front dispo sur http://localhost:5173. Vite proxie automatiquement `/api/*` vers
 - `POST /api/document-requests` — admin : cree une demande, renvoie le magic link (TTL 7 jours, usage unique)
 - `GET /api/public/document-requests/{token}` — public : resout un magic link, renvoie le contexte (driver, type)
 - `POST /api/public/document-requests/{token}/upload` — public : upload du PDF par le depanneur, cree DocumentVersion pending
+- `GET /api/documents/{version_id}` — admin : details d'une version (uploaded_by, dates, statut, motif rejet, etc.)
+- `POST /api/documents/{version_id}/validate` — admin : pending -> validated, devient current_version
+- `POST /api/documents/{version_id}/reject` body `{reason}` — admin : pending -> rejected (motif obligatoire)
 
 ## Deploiement (VPS Hetzner)
 

@@ -49,4 +49,17 @@ export const api = {
     request('/auth/login', { method: 'POST', body: { email, password }, auth: false }),
   me: () => request('/auth/me'),
   dashboard: () => request('/dashboard'),
+  docTypes: () => request('/document-types'),
+  drivers: {
+    list: ({ includeArchived = false } = {}) =>
+      request(`/drivers?include_archived=${includeArchived}`),
+    create: (payload) => request('/drivers', { method: 'POST', body: payload }),
+    update: (id, payload) => request(`/drivers/${id}`, { method: 'PATCH', body: payload }),
+    archive: (id) => request(`/drivers/${id}/archive`, { method: 'POST' }),
+    syncRequirements: (id, documentTypeIds) =>
+      request(`/drivers/${id}/requirements`, {
+        method: 'PUT',
+        body: { document_type_ids: documentTypeIds },
+      }),
+  },
 }

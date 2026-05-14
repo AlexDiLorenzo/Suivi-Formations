@@ -67,6 +67,11 @@ class DriverOut(BaseModel):
     last_sync_at: datetime | None
     created_at: datetime
     updated_at: datetime
+    required_document_type_ids: list[UUID] = Field(default_factory=list)
+
+
+class RequirementsSync(BaseModel):
+    document_type_ids: list[UUID]
 
 
 class DocumentTypeOut(BaseModel):

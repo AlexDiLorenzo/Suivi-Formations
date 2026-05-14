@@ -10,6 +10,7 @@
   --c-status-orange: #D97A1F;
   --c-status-red: #A32D2D;
   --c-status-grey: #D3D1C7;
+  --c-status-blue: #4F6D9A;
 
   --font-body: 'DM Sans', system-ui, sans-serif;
   --font-heading: 'Space Mono', ui-monospace, monospace;
@@ -284,6 +285,19 @@ td.cell.pending::before {
   position: absolute;
   inset: 0;
   border: 2px dashed rgba(26, 25, 15, 0.35);
+  pointer-events: none;
+}
+
+td.cell.requested {
+  background: var(--c-status-blue);
+  color: white;
+  position: relative;
+}
+td.cell.requested::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 2px dashed rgba(255, 255, 255, 0.35);
   pointer-events: none;
 }
 

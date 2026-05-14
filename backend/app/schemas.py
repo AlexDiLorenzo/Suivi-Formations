@@ -118,6 +118,7 @@ class DashboardCell(BaseModel):
     current_version_id: UUID | None = None
     has_pending_version: bool = False
     pending_version_id: UUID | None = None
+    open_request_sent_at: datetime | None = None
 
 
 class DashboardDriver(BaseModel):

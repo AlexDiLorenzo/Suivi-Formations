@@ -14,6 +14,13 @@ function formatDateFr(iso) {
   return `${d}/${m}/${y}`
 }
 
+function daysSinceIso(iso) {
+  if (!iso) return null
+  const then = new Date(iso)
+  const now = new Date()
+  return Math.max(0, Math.floor((now.getTime() - then.getTime()) / 86400000))
+}
+
 function cellSubLabel(cell) {
   if (cell.status === 'grey') return ''
   if (cell.status === 'red') {
@@ -112,20 +119,30 @@ function SummaryBar({ summary }) {
 function MatrixCell({ cell, onClick }) {
   const clickable = cell.status !== 'grey'
   const pending = cell.has_pending_version
-  const visualStatus = pending ? 'pending' : cell.status
-  const sub = pending ? 'A valider' : cellSubLabel(cell)
-  const tooltip = pending
-    ? 'Version en attente de validation — clique pour valider'
-    : clickable
-      ? 'Cliquer pour uploader / consulter'
-      : 'Non applicable'
+  const requested = !pending && cell.open_request_sent_at != null
+  const requestedDays = requested ? daysSinceIso(cell.open_request_sent_at) : null
+
+  let visualStatus = cell.status
+  let sub = cellSubLabel(cell)
+  let tooltip = clickable ? 'Cliquer pour uploader / consulter' : 'Non applicable'
+
+  if (pending) {
+    visualStatus = 'pending'
+    sub = 'A valider'
+    tooltip = 'Version en attente de validation — clique pour valider'
+  } else if (requested) {
+    visualStatus = 'requested'
+    sub = requestedDays === 0 ? 'Demande aujourd\'hui' : `Demande il y a ${requestedDays}j`
+    tooltip = `Demande envoyee il y a ${requestedDays}j, en attente de reponse — clique pour relancer ou uploader`
+  }
+
   return (
     <td
       className={`cell ${visualStatus} ${clickable ? 'clickable' : ''}`}
       onClick={clickable ? onClick : undefined}
       title={tooltip}
     >
-      {cell.status === 'grey' && !pending ? (
+      {cell.status === 'grey' && !pending && !requested ? (
         <span>—</span>
       ) : (
         <>

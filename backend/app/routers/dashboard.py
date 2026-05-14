@@ -1,5 +1,5 @@
 from collections import Counter
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Annotated
 from uuid import UUID
 
@@ -11,6 +11,7 @@ from app.db import get_db
 from app.deps import get_current_admin
 from app.models import (
     Document,
+    DocumentRequest,
     DocumentType,
     DocumentVersion,
     DocumentVersionStatus,
@@ -76,6 +77,17 @@ def get_dashboard(db: Annotated[Session, Depends(get_db)]):
     ):
         pending_by_pair.setdefault((doc.driver_id, doc.document_type_id), ver.id)
 
+    now = datetime.now(timezone.utc)
+    open_request_by_pair: dict[tuple, datetime] = {}
+    for req in (
+        db.query(DocumentRequest)
+        .filter(DocumentRequest.consumed_at.is_(None))
+        .filter(DocumentRequest.expires_at > now)
+        .order_by(DocumentRequest.created_at.desc())
+        .all()
+    ):
+        open_request_by_pair.setdefault((req.driver_id, req.document_type_id), req.created_at)
+
     counter: Counter = Counter()
     out_drivers: list[DashboardDriver] = []
 
@@ -84,6 +96,7 @@ def get_dashboard(db: Annotated[Session, Depends(get_db)]):
         for dt in doc_types:
             pending_id = pending_by_pair.get((driver.id, dt.id))
             has_pending = pending_id is not None
+            open_request_at = open_request_by_pair.get((driver.id, dt.id))
             if (driver.id, dt.id) not in applicable_set:
                 cells.append(DashboardCell(document_type_id=dt.id, status=CellStatus.GREY))
                 counter[CellStatus.GREY] += 1
@@ -98,6 +111,7 @@ def get_dashboard(db: Annotated[Session, Depends(get_db)]):
                         reason=CellRedReason.NEVER_RECEIVED,
                         has_pending_version=has_pending,
                         pending_version_id=pending_id,
+                        open_request_sent_at=open_request_at,
                     )
                 )
                 counter[CellStatus.RED] += 1
@@ -124,6 +138,7 @@ def get_dashboard(db: Annotated[Session, Depends(get_db)]):
                     current_version_id=current.id,
                     has_pending_version=has_pending,
                     pending_version_id=pending_id,
+                    open_request_sent_at=open_request_at,
                 )
             )
             counter[status_value] += 1

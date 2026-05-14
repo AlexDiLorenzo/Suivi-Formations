@@ -41,7 +41,7 @@ services:
       - "traefik.http.routers.habilitation.rule=Host(`formations.alex-worksmart.com`)"
       - "traefik.http.routers.habilitation.entrypoints=websecure"
       - "traefik.http.routers.habilitation.tls=true"
-      - "traefik.http.routers.habilitation.tls.certresolver=cloudflare"
+      - "traefik.http.routers.habilitation.tls.certresolver=le"
       - "traefik.http.services.habilitation.loadbalancer.server.port=8000"
 
 volumes:

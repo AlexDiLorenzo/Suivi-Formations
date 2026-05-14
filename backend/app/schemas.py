@@ -116,6 +116,7 @@ class DashboardCell(BaseModel):
     date_peremption: date | None = None
     days_until_expiry: int | None = None
     current_version_id: UUID | None = None
+    has_pending_version: bool = False
 
 
 class DashboardDriver(BaseModel):
@@ -156,3 +157,24 @@ class DocumentVersionOut(BaseModel):
     uploaded_by: str
     uploaded_at: datetime
     statut: str
+
+
+class DocumentRequestCreate(BaseModel):
+    driver_id: UUID
+    document_type_id: UUID
+
+
+class DocumentRequestCreated(BaseModel):
+    id: UUID
+    token: str
+    magic_link: str
+    expires_at: datetime
+
+
+class PublicDocumentRequestInfo(BaseModel):
+    driver_prenom: str
+    driver_nom: str
+    document_type_code: str
+    document_type_libelle: str
+    duree_validite_jours_default: int | None
+    expires_at: datetime

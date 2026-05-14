@@ -76,6 +76,9 @@ Front dispo sur http://localhost:5173. Vite proxie automatiquement `/api/*` vers
 - `GET /api/dashboard` — matrice depanneurs × types avec statut colore par cellule
 - `POST /api/documents/upload` — upload PDF (admin) pour un (driver, doc_type) applicable, chiffre en Fernet, cree DocumentVersion validated
 - `GET /api/documents/{version_id}/download` — telecharge la version dechiffree (admin uniquement)
+- `POST /api/document-requests` — admin : cree une demande, renvoie le magic link (TTL 7 jours, usage unique)
+- `GET /api/public/document-requests/{token}` — public : resout un magic link, renvoie le contexte (driver, type)
+- `POST /api/public/document-requests/{token}/upload` — public : upload du PDF par le depanneur, cree DocumentVersion pending
 
 ## Deploiement (VPS Hetzner)
 

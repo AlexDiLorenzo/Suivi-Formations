@@ -118,6 +118,9 @@ function MatrixCell({ cell, onClick }) {
       onClick={clickable ? onClick : undefined}
       title={clickable ? 'Cliquer pour uploader / consulter' : 'Non applicable'}
     >
+      {cell.has_pending_version && (
+        <span className="pending-dot" title="Une version est en attente de validation">●</span>
+      )}
       {cell.status === 'grey' ? (
         <span>—</span>
       ) : (
@@ -216,7 +219,37 @@ function UploadModal({ driver, docType, currentVersionId, onClose, onUploaded })
   const [peremptionTouched, setPeremptionTouched] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [downloading, setDownloading] = useState(false)
+  const [requesting, setRequesting] = useState(false)
+  const [magicLink, setMagicLink] = useState(null)
+  const [linkCopied, setLinkCopied] = useState(false)
   const [error, setError] = useState('')
+
+  async function handleCreateRequest() {
+    setError('')
+    setRequesting(true)
+    try {
+      const created = await api.documentRequests.create({
+        driverId: driver.id,
+        documentTypeId: docType.id,
+      })
+      setMagicLink(created.magic_link)
+    } catch (err) {
+      setError(err.detail || 'Erreur lors de la creation de la demande')
+    } finally {
+      setRequesting(false)
+    }
+  }
+
+  async function handleCopyLink() {
+    if (!magicLink) return
+    try {
+      await navigator.clipboard.writeText(magicLink)
+      setLinkCopied(true)
+      setTimeout(() => setLinkCopied(false), 2000)
+    } catch {
+      /* clipboard refusee, l'utilisateur peut copier manuellement */
+    }
+  }
 
   function handleEmissionChange(value) {
     setDateEmission(value)
@@ -297,10 +330,37 @@ function UploadModal({ driver, docType, currentVersionId, onClose, onUploaded })
           )}
 
           <div className="section">
-            <h3>{currentVersionId ? 'Nouvelle version' : 'Premier upload'}</h3>
+            <h3>Demander au depanneur</h3>
             <p className="hint">
-              Toute nouvelle version remplace l'actuelle dans le tableau de bord.
-              L'ancienne reste archivee en base (jamais d'ecrasement).
+              Genere un lien a usage unique (valide 7 jours) que tu peux envoyer
+              au depanneur par WhatsApp / SMS / email pour qu'il uploade lui-meme
+              son document. La version sera creee en attente de ta validation.
+            </p>
+            {!magicLink ? (
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={handleCreateRequest}
+                disabled={requesting}
+              >
+                {requesting ? 'Generation…' : 'Generer un lien magique'}
+              </button>
+            ) : (
+              <div className="magic-link">
+                <input type="text" readOnly value={magicLink} onFocus={(e) => e.target.select()} />
+                <button type="button" className="btn btn-sm" onClick={handleCopyLink}>
+                  {linkCopied ? 'Copie ✓' : 'Copier'}
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="section">
+            <h3>{currentVersionId ? 'Nouvelle version (admin)' : 'Premier upload (admin)'}</h3>
+            <p className="hint">
+              Si tu as deja le PDF, tu peux l'uploader directement. La version
+              sera creee comme validee. L'ancienne reste archivee en base
+              (jamais d'ecrasement).
             </p>
 
             <div className="field">
@@ -657,10 +717,151 @@ function NavBar({ view, onChangeView, me, onLogout }) {
 }
 
 // =====================================================================
+// Public upload (sans authentification)
+// =====================================================================
+
+function PublicUploadView({ token }) {
+  const [info, setInfo] = useState(null)
+  const [loadError, setLoadError] = useState('')
+  const [file, setFile] = useState(null)
+  const [dateEmission, setDateEmission] = useState('')
+  const [datePeremption, setDatePeremption] = useState('')
+  const [peremptionTouched, setPeremptionTouched] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState('')
+  const [submitted, setSubmitted] = useState(false)
+
+  useEffect(() => {
+    api.publicRequests
+      .get(token)
+      .then(setInfo)
+      .catch((e) => setLoadError(e.detail || 'Lien invalide'))
+  }, [token])
+
+  function handleEmissionChange(value) {
+    setDateEmission(value)
+    if (!peremptionTouched && value && info?.duree_validite_jours_default) {
+      const d = new Date(value)
+      d.setDate(d.getDate() + info.duree_validite_jours_default)
+      setDatePeremption(d.toISOString().slice(0, 10))
+    }
+  }
+
+  function handlePeremptionChange(value) {
+    setPeremptionTouched(true)
+    setDatePeremption(value)
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    setSubmitError('')
+    if (!file) {
+      setSubmitError('Selectionne un fichier PDF')
+      return
+    }
+    setSubmitting(true)
+    try {
+      await api.publicRequests.upload(token, { dateEmission, datePeremption, file })
+      setSubmitted(true)
+    } catch (err) {
+      setSubmitError(err.detail || 'Erreur lors de l\'envoi')
+      setSubmitting(false)
+    }
+  }
+
+  if (loadError) {
+    return (
+      <div className="public-shell">
+        <div className="public-card">
+          <h1>Lien invalide</h1>
+          <p>{loadError}</p>
+          <p className="hint">Demande un nouveau lien a ton responsable.</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!info) {
+    return <div className="public-shell"><div className="public-card">Chargement…</div></div>
+  }
+
+  if (submitted) {
+    return (
+      <div className="public-shell">
+        <div className="public-card">
+          <h1>Document envoye ✓</h1>
+          <p>Merci {info.driver_prenom}. Ton {info.document_type_libelle} a bien ete recu.</p>
+          <p className="hint">Il sera valide par l'administration sous peu. Tu peux fermer cet onglet.</p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="public-shell">
+      <form className="public-card" onSubmit={handleSubmit}>
+        <h1>Envoi de document — 1MDP</h1>
+        <p className="public-context">
+          <strong>{info.driver_prenom} {info.driver_nom}</strong>
+          <br />
+          Document attendu : <strong>{info.document_type_libelle}</strong>
+        </p>
+
+        <div className="field">
+          <label>Fichier (PDF, max 10 MB) *</label>
+          <input
+            type="file"
+            accept="application/pdf"
+            onChange={(e) => setFile(e.target.files?.[0] || null)}
+            required
+          />
+        </div>
+
+        <div className="grid-2">
+          <div className="field">
+            <label>Date d'emission *</label>
+            <input
+              type="date"
+              value={dateEmission}
+              onChange={(e) => handleEmissionChange(e.target.value)}
+              required
+            />
+          </div>
+          <div className="field">
+            <label>Date de peremption *</label>
+            <input
+              type="date"
+              value={datePeremption}
+              onChange={(e) => handlePeremptionChange(e.target.value)}
+              required
+            />
+          </div>
+        </div>
+
+        {submitError && <div className="error">{submitError}</div>}
+
+        <button type="submit" className="btn" disabled={submitting} style={{ width: '100%', marginTop: 8 }}>
+          {submitting ? 'Envoi en cours…' : 'Envoyer le document'}
+        </button>
+
+        <p className="hint" style={{ marginTop: 16, textAlign: 'center' }}>
+          Lien valide jusqu'au {formatDateFr(info.expires_at.slice(0, 10))}
+        </p>
+      </form>
+    </div>
+  )
+}
+
+// =====================================================================
 // App
 // =====================================================================
 
-export default function App() {
+function getPublicToken() {
+  const m = window.location.pathname.match(/^\/upload\/([\w-]+)\/?$/)
+  return m ? m[1] : null
+}
+
+function AdminApp() {
   const [authed, setAuthed] = useState(Boolean(getToken()))
   const [me, setMe] = useState(null)
   const [view, setView] = useState('dashboard')
@@ -691,4 +892,12 @@ export default function App() {
       </main>
     </>
   )
+}
+
+export default function App() {
+  const publicToken = getPublicToken()
+  if (publicToken) {
+    return <PublicUploadView token={publicToken} />
+  }
+  return <AdminApp />
 }

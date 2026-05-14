@@ -2,7 +2,15 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.routers import auth, dashboard, document_types, documents, drivers, requirements
+from app.routers import (
+    auth,
+    dashboard,
+    document_requests,
+    document_types,
+    documents,
+    drivers,
+    requirements,
+)
 
 
 _settings = get_settings()
@@ -30,3 +38,13 @@ app.include_router(document_types.router, prefix="/api/document-types", tags=["d
 app.include_router(requirements.router, prefix="/api/requirements", tags=["requirements"])
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["dashboard"])
 app.include_router(documents.router, prefix="/api/documents", tags=["documents"])
+app.include_router(
+    document_requests.admin_router,
+    prefix="/api/document-requests",
+    tags=["document-requests"],
+)
+app.include_router(
+    document_requests.public_router,
+    prefix="/api/public/document-requests",
+    tags=["public"],
+)

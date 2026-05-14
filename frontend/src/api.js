@@ -44,14 +44,14 @@ async function request(path, { method = 'GET', body, auth = true } = {}) {
   return data
 }
 
-async function uploadFormData(path, formData) {
-  const token = getToken()
+async function uploadFormData(path, formData, { auth = true } = {}) {
+  const token = auth ? getToken() : null
   const res = await fetch(`/api${path}`, {
     method: 'POST',
     headers: token ? { Authorization: `Bearer ${token}` } : {},
     body: formData,
   })
-  if (res.status === 401) {
+  if (res.status === 401 && auth) {
     clearToken()
     window.location.reload()
     throw new ApiError(401, 'Session expiree')
@@ -114,6 +114,23 @@ export const api = {
       const url = URL.createObjectURL(blob)
       window.open(url, '_blank', 'noopener')
       setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    },
+  },
+  documentRequests: {
+    create: ({ driverId, documentTypeId }) =>
+      request('/document-requests', {
+        method: 'POST',
+        body: { driver_id: driverId, document_type_id: documentTypeId },
+      }),
+  },
+  publicRequests: {
+    get: (token) => request(`/public/document-requests/${token}`, { auth: false }),
+    upload: (token, { dateEmission, datePeremption, file }) => {
+      const fd = new FormData()
+      fd.append('date_emission', dateEmission)
+      fd.append('date_peremption', datePeremption)
+      fd.append('file', file)
+      return uploadFormData(`/public/document-requests/${token}/upload`, fd, { auth: false })
     },
   },
 }

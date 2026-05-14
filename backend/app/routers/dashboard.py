@@ -65,12 +65,23 @@ def get_dashboard(db: Annotated[Session, Depends(get_db)]):
         and version.statut == DocumentVersionStatus.VALIDATED.value
     }
 
+    pending_pairs: set[tuple] = {
+        (doc.driver_id, doc.document_type_id)
+        for doc, ver in (
+            db.query(Document, DocumentVersion)
+            .join(DocumentVersion, DocumentVersion.document_id == Document.id)
+            .filter(DocumentVersion.statut == DocumentVersionStatus.PENDING.value)
+            .all()
+        )
+    }
+
     counter: Counter = Counter()
     out_drivers: list[DashboardDriver] = []
 
     for driver in drivers:
         cells: list[DashboardCell] = []
         for dt in doc_types:
+            has_pending = (driver.id, dt.id) in pending_pairs
             if (driver.id, dt.id) not in applicable_set:
                 cells.append(DashboardCell(document_type_id=dt.id, status=CellStatus.GREY))
                 counter[CellStatus.GREY] += 1
@@ -83,6 +94,7 @@ def get_dashboard(db: Annotated[Session, Depends(get_db)]):
                         document_type_id=dt.id,
                         status=CellStatus.RED,
                         reason=CellRedReason.NEVER_RECEIVED,
+                        has_pending_version=has_pending,
                     )
                 )
                 counter[CellStatus.RED] += 1
@@ -107,6 +119,7 @@ def get_dashboard(db: Annotated[Session, Depends(get_db)]):
                     date_peremption=current.date_peremption,
                     days_until_expiry=days,
                     current_version_id=current.id,
+                    has_pending_version=has_pending,
                 )
             )
             counter[status_value] += 1

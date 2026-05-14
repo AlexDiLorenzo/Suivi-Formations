@@ -40,7 +40,7 @@ Module 1MDP de suivi des habilitations des dépanneurs (B2XL, CACES, permis, car
 | 6 | Relances automatiques (n8n) | à faire |
 | 7 | Historique versions + export PDF "état à date T" | à faire |
 | 8 | RGPD : purge configurable post-départ, log d'accès | à faire |
-| 9 | Déploiement prod (sous-domaine, TLS, sauvegardes) | à faire |
+| 9 | Déploiement prod (sous-domaine, TLS, sauvegardes) | 🟡 backend en ligne sur https://formations.alex-worksmart.com (TLS OK), sauvegardes Postgres restant à mettre en place |
 
 ## Conventions
 
@@ -82,5 +82,7 @@ docker compose down -v
 
 ## Liens
 
+- **Repo GitHub** : https://github.com/AlexDiLorenzo/Suivi-Formations
+- **Domaine prod** : https://formations.alex-worksmart.com (à activer après bootstrap VPS)
 - **DepanTime** (outil voisin, source de vérité des fiches dépanneurs) : `C:\Users\alexa\Desktop\BUSINESS\MTP_DEP\DEPANTIME\depantime-project\depantime\`
 - Doc OpenAPI locale : `http://localhost:8000/docs` après `docker compose up`

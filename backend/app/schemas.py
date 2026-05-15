@@ -41,6 +41,7 @@ class DriverCreate(BaseModel):
     telephone: str | None = None
     date_entree: date | None = None
     external_id_depantime: str | None = None
+    profil: str | None = None
 
 
 class DriverUpdate(BaseModel):
@@ -51,6 +52,7 @@ class DriverUpdate(BaseModel):
     date_entree: date | None = None
     date_sortie: date | None = None
     external_id_depantime: str | None = None
+    profil: str | None = None
 
 
 class DriverOut(BaseModel):
@@ -61,6 +63,7 @@ class DriverOut(BaseModel):
     email: EmailStr | None
     telephone: str | None
     statut: str
+    profil: str | None
     date_entree: date | None
     date_sortie: date | None
     external_id_depantime: str | None
@@ -80,7 +83,17 @@ class DocumentTypeOut(BaseModel):
     code: str
     libelle: str
     duree_validite_jours_default: int | None
+    categorie: str | None
+    est_perimable: bool
+    criticite: str
+    mode_acquisition: str
     display_order: int
+
+
+class ProfilOut(BaseModel):
+    value: str
+    label: str
+    document_codes: list[str]
 
 
 class RequirementCreate(BaseModel):

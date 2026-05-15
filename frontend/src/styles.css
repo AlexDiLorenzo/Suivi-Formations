@@ -86,7 +86,8 @@ a {
   margin-bottom: 6px;
 }
 
-.field input {
+.field input,
+.field select {
   width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--c-border);
@@ -95,7 +96,8 @@ a {
   outline: none;
 }
 
-.field input:focus {
+.field input:focus,
+.field select:focus {
   border-color: var(--c-primary);
 }
 
@@ -562,6 +564,15 @@ td.actions {
 
 .check input { margin: 0; }
 .check:hover { border-color: var(--c-primary); }
+
+.check-group { margin-top: 14px; }
+.check-group:first-of-type { margin-top: 0; }
+.check-group h4 {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--c-text-muted);
+  margin: 0 0 8px;
+}
 
 /* ---------------- Upload modal ---------------- */
 

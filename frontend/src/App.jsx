@@ -8,6 +8,22 @@ const STATUS_LABEL = {
   grey: 'Non applicable',
 }
 
+const CATEGORIE_ORDER = [
+  'permis_conduite',
+  'caces_autorisations',
+  'formations_internes',
+  'diplomes',
+  'administratif',
+]
+
+const CATEGORIE_LABEL = {
+  permis_conduite: 'Permis & conduite',
+  caces_autorisations: 'CACES & autorisations',
+  formations_internes: 'Formations internes',
+  diplomes: 'Diplomes',
+  administratif: 'Administratif RH',
+}
+
 function formatDateFr(iso) {
   if (!iso) return ''
   const [y, m, d] = iso.split('-')
@@ -563,9 +579,10 @@ const EMPTY_FORM = {
   telephone: '',
   date_entree: '',
   external_id_depantime: '',
+  profil: '',
 }
 
-function DriverFormModal({ driver, docTypes, onClose, onSaved }) {
+function DriverFormModal({ driver, docTypes, profils, onClose, onSaved }) {
   const isEdit = Boolean(driver)
   const [form, setForm] = useState(() => {
     if (!driver) return { ...EMPTY_FORM }
@@ -576,6 +593,7 @@ function DriverFormModal({ driver, docTypes, onClose, onSaved }) {
       telephone: driver.telephone || '',
       date_entree: driver.date_entree || '',
       external_id_depantime: driver.external_id_depantime || '',
+      profil: driver.profil || '',
     }
   })
   const [applicableIds, setApplicableIds] = useState(
@@ -597,6 +615,14 @@ function DriverFormModal({ driver, docTypes, onClose, onSaved }) {
     })
   }
 
+  function handleProfilChange(value) {
+    update('profil', value)
+    const profil = profils.find((p) => p.value === value)
+    if (!profil) return
+    const codes = new Set(profil.document_codes)
+    setApplicableIds(new Set(docTypes.filter((dt) => codes.has(dt.code)).map((dt) => dt.id)))
+  }
+
   async function handleSubmit(e) {
     e.preventDefault()
     setError('')
@@ -609,6 +635,7 @@ function DriverFormModal({ driver, docTypes, onClose, onSaved }) {
         telephone: form.telephone || null,
         date_entree: form.date_entree || null,
         external_id_depantime: form.external_id_depantime || null,
+        profil: form.profil || null,
       }
       let saved
       if (isEdit) {
@@ -623,6 +650,10 @@ function DriverFormModal({ driver, docTypes, onClose, onSaved }) {
       setSaving(false)
     }
   }
+
+  const groupedDocTypes = CATEGORIE_ORDER
+    .map((cat) => ({ cat, items: docTypes.filter((dt) => (dt.categorie || 'administratif') === cat) }))
+    .filter((g) => g.items.length > 0)
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -668,23 +699,38 @@ function DriverFormModal({ driver, docTypes, onClose, onSaved }) {
           </div>
 
           <div className="section">
-            <h3>Documents applicables</h3>
-            <p className="hint">
-              Coche les types de documents que ce depanneur doit detenir. Les non-coches
-              s'afficheront en gris dans le tableau de bord.
-            </p>
-            <div className="checks">
-              {docTypes.map((dt) => (
-                <label key={dt.id} className="check">
-                  <input
-                    type="checkbox"
-                    checked={applicableIds.has(dt.id)}
-                    onChange={() => toggleApplicable(dt.id)}
-                  />
-                  <span>{dt.libelle}</span>
-                </label>
-              ))}
+            <h3>Profil &amp; documents applicables</h3>
+            <div className="field">
+              <label>Profil de permis</label>
+              <select value={form.profil} onChange={(e) => handleProfilChange(e.target.value)}>
+                <option value="">— Non defini —</option>
+                {profils.map((p) => (
+                  <option key={p.value} value={p.value}>{p.label}</option>
+                ))}
+              </select>
             </div>
+            <p className="hint">
+              Choisir un profil pre-coche les documents attendus pour ce type de permis.
+              Tu peux ensuite ajuster manuellement — les non-coches s'affichent en gris
+              dans le tableau de bord.
+            </p>
+            {groupedDocTypes.map(({ cat, items }) => (
+              <div key={cat} className="check-group">
+                <h4>{CATEGORIE_LABEL[cat] || cat}</h4>
+                <div className="checks">
+                  {items.map((dt) => (
+                    <label key={dt.id} className="check">
+                      <input
+                        type="checkbox"
+                        checked={applicableIds.has(dt.id)}
+                        onChange={() => toggleApplicable(dt.id)}
+                      />
+                      <span>{dt.libelle}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
 
           {error && <div className="error">{error}</div>}
@@ -701,7 +747,7 @@ function DriverFormModal({ driver, docTypes, onClose, onSaved }) {
   )
 }
 
-function DriversView({ docTypes }) {
+function DriversView({ docTypes, profils }) {
   const [drivers, setDrivers] = useState(null)
   const [error, setError] = useState('')
   const [includeArchived, setIncludeArchived] = useState(false)
@@ -846,6 +892,7 @@ function DriversView({ docTypes }) {
         <DriverFormModal
           driver={editing === 'new' ? null : editing}
           docTypes={docTypes}
+          profils={profils}
           onClose={() => setEditing(null)}
           onSaved={() => {
             setEditing(null)
@@ -1039,11 +1086,13 @@ function AdminApp() {
   const [me, setMe] = useState(null)
   const [view, setView] = useState('dashboard')
   const [docTypes, setDocTypes] = useState([])
+  const [profils, setProfils] = useState([])
 
   useEffect(() => {
     if (!authed) return
     api.me().then(setMe).catch(() => {})
     api.docTypes().then(setDocTypes).catch(() => {})
+    api.profils().then(setProfils).catch(() => {})
   }, [authed])
 
   function handleLogout() {
@@ -1061,7 +1110,7 @@ function AdminApp() {
       <NavBar view={view} onChangeView={setView} me={me} onLogout={handleLogout} />
       <main className="dashboard">
         {view === 'dashboard' && <DashboardView docTypes={docTypes} />}
-        {view === 'drivers' && <DriversView docTypes={docTypes} />}
+        {view === 'drivers' && <DriversView docTypes={docTypes} profils={profils} />}
       </main>
     </>
   )

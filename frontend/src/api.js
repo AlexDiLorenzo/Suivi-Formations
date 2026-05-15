@@ -87,6 +87,7 @@ export const api = {
   me: () => request('/auth/me'),
   dashboard: () => request('/dashboard'),
   docTypes: () => request('/document-types'),
+  profils: () => request('/profils'),
   drivers: {
     list: ({ includeArchived = false } = {}) =>
       request(`/drivers?include_archived=${includeArchived}`),

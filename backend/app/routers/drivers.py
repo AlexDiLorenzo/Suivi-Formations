@@ -28,6 +28,7 @@ def _serialize(driver: Driver, doctype_ids: list[UUID]) -> DriverOut:
         email=driver.email,
         telephone=driver.telephone,
         statut=driver.statut,
+        profil=driver.profil,
         date_entree=driver.date_entree,
         date_sortie=driver.date_sortie,
         external_id_depantime=driver.external_id_depantime,

@@ -27,6 +27,29 @@ class UploadedBy(str, PyEnum):
     DRIVER = "driver"
 
 
+class DriverProfil(str, PyEnum):
+    PERMIS_B = "permis_b"
+    PERMIS_C_CE = "permis_c_ce"
+
+
+class DocumentCategorie(str, PyEnum):
+    PERMIS_CONDUITE = "permis_conduite"
+    CACES_AUTORISATIONS = "caces_autorisations"
+    FORMATIONS_INTERNES = "formations_internes"
+    DIPLOMES = "diplomes"
+    ADMINISTRATIF = "administratif"
+
+
+class DocumentCriticite(str, PyEnum):
+    CRITIQUE = "critique"
+    STANDARD = "standard"
+
+
+class DocumentModeAcquisition(str, PyEnum):
+    UPLOAD = "upload"
+    DOCUSIGN = "docusign"
+
+
 def _uuid_pk():
     return mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
 
@@ -54,6 +77,7 @@ class Driver(Base):
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     telephone: Mapped[str | None] = mapped_column(String(32), nullable=True)
     statut: Mapped[str] = mapped_column(String(20), nullable=False, default=DriverStatus.ACTIVE.value)
+    profil: Mapped[str | None] = mapped_column(String(20), nullable=True)
     date_entree: Mapped[date | None] = mapped_column(Date, nullable=True)
     date_sortie: Mapped[date | None] = mapped_column(Date, nullable=True)
     last_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -72,6 +96,10 @@ class DocumentType(Base):
     code: Mapped[str] = mapped_column(String(40), unique=True, nullable=False)
     libelle: Mapped[str] = mapped_column(String(120), nullable=False)
     duree_validite_jours_default: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    categorie: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    est_perimable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    criticite: Mapped[str] = mapped_column(String(20), nullable=False, default=DocumentCriticite.STANDARD.value)
+    mode_acquisition: Mapped[str] = mapped_column(String(20), nullable=False, default=DocumentModeAcquisition.UPLOAD.value)
     display_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
@@ -115,7 +143,7 @@ class DocumentVersion(Base):
     original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
     mime_type: Mapped[str] = mapped_column(String(120), nullable=False)
     date_emission: Mapped[date] = mapped_column(Date, nullable=False)
-    date_peremption: Mapped[date] = mapped_column(Date, nullable=False)
+    date_peremption: Mapped[date | None] = mapped_column(Date, nullable=True)
     uploaded_by: Mapped[str] = mapped_column(String(20), nullable=False)
     uploaded_by_admin_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("admin_users.id", ondelete="SET NULL"), nullable=True)
     uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)

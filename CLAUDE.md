@@ -1,6 +1,6 @@
 # HABILITATION
 
-Module 1MDP de suivi des habilitations des dépanneurs (B2XL, CACES, permis, carte conducteur). Cadrage fait le 2026-05-13, étape 1 (scaffold backend) livrée le même jour. Voir `README.md` pour le démarrage local.
+Module 1MDP de suivi des habilitations et documents des dépanneurs (permis, FCO, B2XL, CACES, formations, documents administratifs). Cadrage fait le 2026-05-13, étape 1 (scaffold backend) livrée le même jour. Voir `README.md` pour le démarrage local.
 
 ## Stack
 
@@ -11,21 +11,22 @@ Module 1MDP de suivi des habilitations des dépanneurs (B2XL, CACES, permis, car
 - **Frontend** : React 18 + Vite (single-file `src/App.jsx` à la DepanTime). En prod, servi par nginx qui proxie aussi `/api/*` vers le backend (un seul domaine, pas de CORS).
 - **Hébergement prod** : VPS Hetzner Ubuntu, voir [memory reference-vps]
 
-## Périmètre MVP (figé au cadrage)
+## Périmètre fonctionnel
 
-- 4 types de documents : `B2XL`, `CACES` (un seul), `PERMIS`, `CARTE_CONDUCTEUR`
+- **~20 types de documents** en 5 catégories (permis & conduite, CACES & autorisations, formations internes, diplômes, administratif RH). Au cadrage il n'y en avait que 4 — étendu à l'étape 10. Chaque `DocumentType` porte `categorie`, `est_perimable`, `criticite` (critique/standard), `mode_acquisition` (upload/docusign). Seed dans `scripts/seed_doctypes.py`.
 - Tableau de bord matriciel dépanneurs × types, code couleur :
   - **Vert** : doc validé, > 90j de validité restante
   - **Orange** : doc validé, ≤ 90j de validité restante
   - **Rouge** : doc périmé OU applicable et jamais transmis
   - **Gris** : non applicable pour ce dépanneur
-- Applicabilité par dépanneur via `driver_required_documents` (cochée par l'admin)
+  - Documents **non-périmables** (RIB, CV, diplômes…) : pas de date → vert si validé, rouge si applicable et absent (jamais orange)
+- Applicabilité par dépanneur via `driver_required_documents`. Le champ `profil` du dépanneur (permis B / permis C-CE) pré-coche les documents par défaut via `app/profils.py` ; l'admin ajuste ensuite case par case.
+- **Scoring** (étape 10c) : score de conformité par dépanneur, pondéré critique (×3) / standard (×1), + taux global.
 - **Saisie des dates manuelle** (pas d'OCR — décision explicite, à reprendre plus tard)
 - Workflow validation : `pending` → `validated` / `rejected` par l'admin
 - Versions archivées, **jamais d'écrasement** (impératif compliance URSSAF / Inspection du travail)
-- Relances email J-90 / J-30 / J-7 + cas "jamais transmis"
-- Dépanneur : **magic link à usage unique par demande**, pas de compte permanent
-- App séparée de DepanTime, sync de la fiche dépanneur depuis DepanTime (mécanisme à préciser)
+- Dépanneur : **magic link à usage unique par demande**, pas de compte permanent. ⏸️ Flux conservé mais dormant (décision étape 10) — tout est admin-uploadé. Exception à venir : l'attestation sur l'honneur passera par signature DocuSign (étape 10e).
+- App séparée de DepanTime ; import des dépanneurs via `scripts/import_drivers_from_depantime.py` (import manuel à la demande depuis un CSV, pas de sync continu).
 - Rétention par défaut 5 ans post-départ (configurable)
 
 ## État actuel de la roadmap
@@ -41,13 +42,14 @@ Module 1MDP de suivi des habilitations des dépanneurs (B2XL, CACES, permis, car
 | 7 | Historique versions + export PDF "état à date T" | à faire |
 | 8 | RGPD : purge configurable post-départ, log d'accès | à faire |
 | 9 | Déploiement prod (sous-domaine, TLS, sauvegardes) | 🟡 backend en ligne sur https://formations.alex-worksmart.com (TLS OK), sauvegardes Postgres restant à mettre en place |
+| 10 | Évolution modèle documentaire (~20 types, profils, scoring, attestation DocuSign) | 🟡 en cours — 10a schéma ✅ (2026-05-15), 10b profil + applicabilité ✅ (2026-05-16). Reste : 10c scoring, 10d dashboard scores, 10e intégration DocuSign |
 
 ## Conventions
 
 - **Langue** : français pour tout ce qui est user-facing (libellés UI, messages d'erreur API, README). Code et noms techniques en anglais (variables, fonctions, classes, tables).
 - **Pas de commentaires par défaut** : seulement si le WHY est non-évident (contrainte cachée, workaround, invariant subtil).
 - **Pas d'over-engineering** : on construit ce qui est dans le périmètre de l'étape en cours. Pas d'abstractions anticipées pour les étapes suivantes.
-- **Schéma complet dès l'étape 1** : toutes les tables MVP sont créées dans `alembic/versions/0001_initial.py`, même celles utilisées dans les étapes 3+. Cohérence du schéma > granularité des migrations.
+- **Schéma complet dès l'étape 1** : toutes les tables MVP sont créées dans `alembic/versions/0001_initial.py`, même celles utilisées dans les étapes 3+. Cohérence du schéma > granularité des migrations. Les évolutions post-MVP (ex: `0002` à l'étape 10) ajoutent leurs propres migrations additives.
 - **Pas d'écrasement de documents** : un renouvellement = une nouvelle ligne dans `document_versions`, l'ancienne reste. C'est l'invariant compliance, ne pas le casser.
 
 ## Pièges connus
@@ -69,11 +71,14 @@ docker compose up -d --build
 # Logs backend (suivre)
 docker compose logs -f backend
 
-# Seed des 4 types de documents
+# Seed des types de documents (~20, idempotent — supprime aussi les types obsolètes)
 docker compose exec backend python -m scripts.seed_doctypes
 
 # Seed demo (3 dépanneurs avec cellules de chaque couleur — DEV UNIQUEMENT)
 docker compose exec backend python -m scripts.seed_demo
+
+# Import des dépanneurs depuis un CSV exporté de DepanTime
+docker compose exec backend python -m scripts.import_drivers_from_depantime --csv scripts/data/depantime_employees.csv
 
 # Frontend en dev (hors Docker)
 cd frontend && npm install && npm run dev   # http://localhost:5173

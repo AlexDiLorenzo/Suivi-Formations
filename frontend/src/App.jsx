@@ -475,7 +475,7 @@ function UploadModal({ driver, docType, currentVersionId, pendingVersionId, onCl
   async function handleDownloadPending() {
     setDownloadingPending(true)
     try {
-      await api.documents.openInNewTab(pendingVersionId)
+      await api.documents.download(pendingVersionId)
     } catch (err) {
       setError(err.detail || 'Erreur lors du telechargement')
     } finally {
@@ -583,7 +583,7 @@ function UploadModal({ driver, docType, currentVersionId, pendingVersionId, onCl
     if (!currentVersionId) return
     setDownloading(true)
     try {
-      await api.documents.openInNewTab(currentVersionId)
+      await api.documents.download(currentVersionId)
     } catch (err) {
       setError(err.detail || 'Erreur lors du telechargement')
     } finally {

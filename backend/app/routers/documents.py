@@ -1,3 +1,4 @@
+import unicodedata
 from datetime import date, datetime, timezone
 from typing import Annotated
 from uuid import UUID
@@ -137,6 +138,26 @@ def get_version(version_id: UUID, db: Annotated[Session, Depends(get_db)]):
     return version
 
 
+def _slug(text: str) -> str:
+    """Majuscules, sans accents, alphanumerique uniquement (sain pour un nom de fichier)."""
+    decomposed = unicodedata.normalize("NFKD", text or "")
+    ascii_only = "".join(c for c in decomposed if not unicodedata.combining(c))
+    return "".join(c for c in ascii_only.upper() if c.isalnum())
+
+
+def _download_filename(version: DocumentVersion, doc_type: DocumentType, driver: Driver) -> str:
+    """Nom de fichier propre : CODE_NOM_PRENOM_JJ.MM.AAAA.pdf
+
+    La date est la peremption si le document est perimable, sinon l'emission.
+    """
+    parts = [doc_type.code, _slug(driver.nom), _slug(driver.prenom)]
+    ref_date = version.date_peremption or version.date_emission
+    if ref_date:
+        parts.append(ref_date.strftime("%d.%m.%Y"))
+    base = "_".join(p for p in parts if p)
+    return f"{base}.pdf"
+
+
 @router.get("/{version_id}/download")
 def download_document(version_id: UUID, db: Annotated[Session, Depends(get_db)]):
     version = db.get(DocumentVersion, version_id)
@@ -147,11 +168,18 @@ def download_document(version_id: UUID, db: Annotated[Session, Depends(get_db)])
     except StorageError as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
-    safe_name = version.original_filename.replace('"', "_")
+    document = db.get(Document, version.document_id)
+    doc_type = db.get(DocumentType, document.document_type_id) if document else None
+    driver = db.get(Driver, document.driver_id) if document else None
+    if doc_type and driver:
+        filename = _download_filename(version, doc_type, driver)
+    else:
+        filename = version.original_filename.replace('"', "_")
+
     return Response(
         content=plaintext,
         media_type=version.mime_type,
-        headers={"Content-Disposition": f'inline; filename="{safe_name}"'},
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 

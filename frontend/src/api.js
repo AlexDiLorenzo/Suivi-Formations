@@ -62,7 +62,7 @@ async function uploadFormData(path, formData, { auth = true } = {}) {
   return data
 }
 
-async function downloadAsBlob(path) {
+async function fetchDownload(path) {
   const token = getToken()
   const res = await fetch(`/api${path}`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -78,7 +78,22 @@ async function downloadAsBlob(path) {
     try { detail = JSON.parse(text)?.detail || detail } catch { /* noop */ }
     throw new ApiError(res.status, detail)
   }
-  return res.blob()
+  const blob = await res.blob()
+  // Nom de fichier propre fourni par le backend (Content-Disposition).
+  const cd = res.headers.get('Content-Disposition') || ''
+  const match = cd.match(/filename="?([^"]+)"?/i)
+  return { blob, filename: match ? match[1] : 'document.pdf' }
+}
+
+function triggerBlobDownload(blob, filename) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 60_000)
 }
 
 export const api = {
@@ -111,11 +126,9 @@ export const api = {
       fd.append('file', file)
       return uploadFormData('/documents/upload', fd)
     },
-    openInNewTab: async (versionId) => {
-      const blob = await downloadAsBlob(`/documents/${versionId}/download`)
-      const url = URL.createObjectURL(blob)
-      window.open(url, '_blank', 'noopener')
-      setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    download: async (versionId) => {
+      const { blob, filename } = await fetchDownload(`/documents/${versionId}/download`)
+      triggerBlobDownload(blob, filename)
     },
     validate: (versionId) =>
       request(`/documents/${versionId}/validate`, { method: 'POST' }),

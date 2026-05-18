@@ -1,4 +1,5 @@
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -43,7 +44,11 @@ class Settings(BaseSettings):
     docusign_integration_key: str = ""
     docusign_user_id: str = ""
     docusign_account_id: str = ""
-    # Cle privee RSA (PEM). Peut contenir des "\n" litteraux (cas .env Docker).
+    # Cle privee RSA. Deux options (cf. docusign_private_key_pem) :
+    #  - DOCUSIGN_PRIVATE_KEY_FILE : chemin d'un fichier .key monte dans le
+    #    conteneur (methode DepanTime, recommandee) ;
+    #  - DOCUSIGN_PRIVATE_KEY : la cle inline, "\n" litteraux acceptes.
+    docusign_private_key_file: str = "/app/docusign-private.key"
     docusign_private_key: str = ""
     docusign_template_id: str = "6da048a0-92a0-458e-a0e8-a2ae33090940"
     docusign_role_name: str = "Salarie"
@@ -55,13 +60,23 @@ class Settings(BaseSettings):
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
     @property
+    def docusign_private_key_pem(self) -> str:
+        """Cle RSA privee. Lue depuis le fichier monte s'il existe, sinon depuis
+        la variable DOCUSIGN_PRIVATE_KEY (avec "\\n" litteraux reconvertis)."""
+        if self.docusign_private_key_file:
+            path = Path(self.docusign_private_key_file)
+            if path.is_file():
+                return path.read_text()
+        return self.docusign_private_key.replace("\\n", "\n")
+
+    @property
     def docusign_enabled(self) -> bool:
         return all(
             [
                 self.docusign_integration_key,
                 self.docusign_user_id,
                 self.docusign_account_id,
-                self.docusign_private_key,
+                self.docusign_private_key_pem,
                 self.docusign_template_id,
             ]
         )
@@ -69,12 +84,6 @@ class Settings(BaseSettings):
     @property
     def docusign_oauth_host(self) -> str:
         return "account-d.docusign.com" if self.docusign_env == "demo" else "account.docusign.com"
-
-    @property
-    def docusign_private_key_pem(self) -> str:
-        # Restaure les vrais retours a la ligne si la cle a ete passee
-        # sur une seule ligne avec des "\n" echappes (frequent en .env).
-        return self.docusign_private_key.replace("\\n", "\n")
 
 
 @lru_cache

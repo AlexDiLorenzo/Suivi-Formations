@@ -37,12 +37,15 @@ services:
       DOCUSIGN_USER_ID: ${DOCUSIGN_USER_ID:-}
       DOCUSIGN_ACCOUNT_ID: ${DOCUSIGN_ACCOUNT_ID:-}
       DOCUSIGN_PRIVATE_KEY: ${DOCUSIGN_PRIVATE_KEY:-}
+      DOCUSIGN_PRIVATE_KEY_FILE: ${DOCUSIGN_PRIVATE_KEY_FILE:-/app/docusign-private.key}
       DOCUSIGN_TEMPLATE_ID: ${DOCUSIGN_TEMPLATE_ID:-6da048a0-92a0-458e-a0e8-a2ae33090940}
       DOCUSIGN_ROLE_NAME: ${DOCUSIGN_ROLE_NAME:-Salarie}
       DOCUSIGN_ENV: ${DOCUSIGN_ENV:-production}
       ENV: prod
     volumes:
       - documents_data:/var/lib/habilitation/documents
+      # Cle privee RSA DocuSign : deposer le fichier sur le VPS avant le 'up'.
+      - /srv/habilitation/docusign-private.key:/app/docusign-private.key:ro
     command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     networks:
       - habilitation-net

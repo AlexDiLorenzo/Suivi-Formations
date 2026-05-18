@@ -25,17 +25,17 @@ _COMMUNS = [
     "MUTUELLE",
 ]
 
+# B1VL est optionnel chez 1MDP (meme pour les permis C/CE) : volontairement
+# absent des pre-remplissages, l'admin le coche au cas par cas si besoin.
 PROFIL_DOCUMENTS: dict[str, list[str]] = {
     DriverProfil.PERMIS_C_CE.value: _COMMUNS + [
         "FIMO_FCO",
         "B2XL",
-        "B1VL",
         "CACES_GRUE",
         "CACES_CHARIOT",
         "AUTORISATION_CONDUITE",
     ],
     DriverProfil.PERMIS_B.value: _COMMUNS + [
-        "B1VL",
         "AUTORISATION_CONDUITE",
     ],
 }

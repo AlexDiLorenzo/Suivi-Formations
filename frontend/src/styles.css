@@ -233,6 +233,24 @@ a {
   border: 1px solid var(--c-border);
   border-radius: 6px;
   background: white;
+  scrollbar-width: thin;
+}
+
+.matrix-wrap::-webkit-scrollbar {
+  height: 12px;
+}
+
+.matrix-wrap::-webkit-scrollbar-track {
+  background: #F4F3EE;
+}
+
+.matrix-wrap::-webkit-scrollbar-thumb {
+  background: var(--c-border);
+  border-radius: 6px;
+}
+
+.matrix-wrap::-webkit-scrollbar-thumb:hover {
+  background: var(--c-text-muted);
 }
 
 table.matrix {

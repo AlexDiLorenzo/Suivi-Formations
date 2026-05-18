@@ -40,7 +40,7 @@ SEEDS = [
     _t("PERMIS", "Permis de conduire", _C.PERMIS_CONDUITE, perimable=True, duree=5 * AN, criticite=_CRIT, ordre=10),
     _t("ATTESTATION_PERMIS", "Attestation sur l'honneur de validite du permis", _C.PERMIS_CONDUITE, perimable=True, duree=90, mode=_DOCUSIGN, ordre=20),
     _t("FIMO_FCO", "FIMO / FCO", _C.PERMIS_CONDUITE, perimable=True, duree=5 * AN, criticite=_CRIT, ordre=30),
-    _t("B2XL", "B2XL", _C.PERMIS_CONDUITE, perimable=True, duree=5 * AN, criticite=_CRIT, ordre=40),
+    _t("B2XL", "B2XL", _C.PERMIS_CONDUITE, perimable=True, duree=3 * AN, criticite=_CRIT, ordre=40),
     _t("B1VL", "B1VL", _C.PERMIS_CONDUITE, perimable=True, duree=5 * AN, criticite=_CRIT, ordre=50),
     _t("CACES_GRUE", "CACES grue", _C.CACES_AUTORISATIONS, perimable=True, duree=5 * AN, criticite=_CRIT, ordre=60),
     _t("CACES_CHARIOT", "CACES chariot elevateur", _C.CACES_AUTORISATIONS, perimable=True, duree=5 * AN, criticite=_CRIT, ordre=70),

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api, clearToken, getToken, setToken } from './api.js'
 
 const STATUS_LABEL = {
@@ -216,12 +216,32 @@ function DashboardView({ docTypes }) {
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
   const [uploadCtx, setUploadCtx] = useState(null)
+  const matrixRef = useRef(null)
 
   function reload() {
     api.dashboard().then(setData).catch((e) => setError(e.detail || String(e)))
   }
 
   useEffect(reload, [])
+
+  // Permet de defiler la matrice horizontalement avec une simple molette
+  // verticale (souris sans scroll lateral). Listener natif non-passif :
+  // React enregistre onWheel en passif, preventDefault y serait ignore.
+  useEffect(() => {
+    const el = matrixRef.current
+    if (!el) return undefined
+    function onWheel(e) {
+      if (el.scrollWidth <= el.clientWidth || e.deltaY === 0) return
+      const atStart = el.scrollLeft <= 0
+      const atEnd = el.scrollLeft + el.clientWidth >= el.scrollWidth - 1
+      // Au bord, on laisse la page defiler verticalement comme d'habitude.
+      if ((e.deltaY < 0 && atStart) || (e.deltaY > 0 && atEnd)) return
+      el.scrollLeft += e.deltaY * (e.deltaMode === 1 ? 16 : 1)
+      e.preventDefault()
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [data])
 
   if (error) return <div className="error" style={{ padding: 24 }}>{error}</div>
   if (!data) return <div className="empty">Chargement…</div>
@@ -246,7 +266,7 @@ function DashboardView({ docTypes }) {
           <code>scripts.seed_demo</code> en dev.
         </div>
       ) : (
-        <div className="matrix-wrap">
+        <div className="matrix-wrap" ref={matrixRef}>
           <table className="matrix">
             <thead>
               <tr>

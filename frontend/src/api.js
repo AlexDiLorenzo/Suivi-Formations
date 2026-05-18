@@ -37,9 +37,14 @@ async function request(path, { method = 'GET', body, auth = true } = {}) {
     throw new ApiError(401, 'Session expiree')
   }
   const text = await res.text()
-  const data = text ? JSON.parse(text) : null
+  let data = null
+  try {
+    data = text ? JSON.parse(text) : null
+  } catch {
+    // Reponse non-JSON (page d'erreur nginx, timeout proxy...) : texte brut conserve.
+  }
   if (!res.ok) {
-    throw new ApiError(res.status, data?.detail || res.statusText)
+    throw new ApiError(res.status, data?.detail || text?.trim()?.slice(0, 300) || res.statusText)
   }
   return data
 }
@@ -57,8 +62,15 @@ async function uploadFormData(path, formData, { auth = true } = {}) {
     throw new ApiError(401, 'Session expiree')
   }
   const text = await res.text()
-  const data = text ? JSON.parse(text) : null
-  if (!res.ok) throw new ApiError(res.status, data?.detail || res.statusText)
+  let data = null
+  try {
+    data = text ? JSON.parse(text) : null
+  } catch {
+    /* reponse non-JSON */
+  }
+  if (!res.ok) {
+    throw new ApiError(res.status, data?.detail || text?.trim()?.slice(0, 300) || res.statusText)
+  }
   return data
 }
 

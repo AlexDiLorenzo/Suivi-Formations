@@ -1,3 +1,4 @@
+import logging
 from datetime import date, datetime, timedelta, timezone
 from typing import Annotated
 from uuid import UUID
@@ -28,6 +29,7 @@ from app.storage import encrypt_and_store
 
 
 router = APIRouter(dependencies=[Depends(get_current_admin)])
+logger = logging.getLogger(__name__)
 
 # Filet de securite si le type de document n'a pas de duree configuree.
 ATTESTATION_DEFAULT_VALIDITE_JOURS = 90
@@ -126,7 +128,14 @@ def send_for_signature(
             email_subject=subject,
         )
     except ds.DocusignError as exc:
+        logger.warning("Envoi DocuSign refuse : %s", exc)
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
+    except Exception as exc:  # httpx injoignable, cle RSA invalide, reponse inattendue...
+        logger.exception("Echec inattendu de l'envoi DocuSign")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Erreur DocuSign inattendue ({type(exc).__name__}) : {exc}",
+        )
 
     envelope = SignatureEnvelope(
         driver_id=payload.driver_id,
@@ -162,7 +171,14 @@ def refresh_envelope(
     try:
         ds_status = ds.get_envelope_status(envelope.envelope_id)
     except ds.DocusignError as exc:
+        logger.warning("Rafraichissement DocuSign refuse : %s", exc)
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
+    except Exception as exc:
+        logger.exception("Echec inattendu du rafraichissement DocuSign")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Erreur DocuSign inattendue ({type(exc).__name__}) : {exc}",
+        )
 
     if ds_status:
         envelope.status = ds_status

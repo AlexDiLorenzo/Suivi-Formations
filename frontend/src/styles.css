@@ -229,7 +229,10 @@ a {
 .dot.grey   { background: var(--c-status-grey); }
 
 .matrix-wrap {
-  overflow-x: auto;
+  overflow: auto;
+  /* Hauteur bornee : la matrice defile d'elle-meme, ce qui permet a
+     l'en-tete (thead sticky) et a la colonne depanneur de rester figes. */
+  max-height: calc(100vh - 185px);
   border: 1px solid var(--c-border);
   border-radius: 6px;
   background: white;
@@ -237,6 +240,7 @@ a {
 }
 
 .matrix-wrap::-webkit-scrollbar {
+  width: 12px;
   height: 12px;
 }
 
@@ -275,6 +279,7 @@ table.matrix thead th {
   color: var(--c-text-muted);
   position: sticky;
   top: 0;
+  z-index: 2;
 }
 
 table.matrix th.driver-col, table.matrix td.driver-col {
@@ -285,8 +290,13 @@ table.matrix th.driver-col, table.matrix td.driver-col {
   min-width: 200px;
 }
 
+table.matrix td.driver-col, table.matrix td.score-col {
+  z-index: 1;
+}
+
 table.matrix thead th.driver-col {
   background: #F4F3EE;
+  z-index: 3;
 }
 
 td.cell {
@@ -361,6 +371,7 @@ table.matrix th.score-col, table.matrix td.score-col {
 
 table.matrix thead th.score-col {
   background: #F4F3EE;
+  z-index: 3;
 }
 
 .score-badge {

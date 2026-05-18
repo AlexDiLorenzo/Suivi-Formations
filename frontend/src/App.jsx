@@ -232,6 +232,10 @@ function DashboardView({ docTypes }) {
     if (!el) return undefined
     function onWheel(e) {
       if (el.scrollWidth <= el.clientWidth || e.deltaY === 0) return
+      // Si la matrice peut defiler verticalement (beaucoup de lignes), on
+      // laisse la molette faire son travail naturel : defiler vers le bas,
+      // en-tete fige. La conversion horizontale ne sert que sans debordement vertical.
+      if (el.scrollHeight > el.clientHeight) return
       const atStart = el.scrollLeft <= 0
       const atEnd = el.scrollLeft + el.clientWidth >= el.scrollWidth - 1
       // Au bord, on laisse la page defiler verticalement comme d'habitude.

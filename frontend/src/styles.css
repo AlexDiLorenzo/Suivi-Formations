@@ -656,16 +656,6 @@ td.actions {
 
 .grid-2 .field { margin-bottom: 0; }
 
-.date-field {
-  display: flex;
-  gap: 8px;
-}
-
-.date-field select {
-  flex: 1;
-  min-width: 0;
-}
-
 .section {
   margin-top: 20px;
   padding-top: 20px;

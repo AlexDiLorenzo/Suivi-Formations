@@ -26,6 +26,16 @@ const DS_STATUS_LABEL = {
 const DS_TERMINAL = ['completed', 'declined', 'voided']
 const DS_IN_PROGRESS = ['created', 'sent', 'delivered', 'signed']
 
+const MOIS_LABELS = [
+  'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+  'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre',
+]
+
+function daysInMonth(year, month) {
+  // month : 1-12 ; new Date(y, m, 0) renvoie le dernier jour du mois m.
+  return year && month ? new Date(year, month, 0).getDate() : 31
+}
+
 const CATEGORIE_ORDER = [
   'permis_conduite',
   'caces_autorisations',
@@ -364,6 +374,47 @@ function DashboardView({ docTypes }) {
         />
       )}
     </>
+  )
+}
+
+// Saisie de date en 3 listes deroulantes (Jour / Mois / Annee). Plus simple
+// que le calendrier natif pour remonter de plusieurs annees. value et onChange
+// utilisent le format ISO 'AAAA-MM-JJ' (ou '' si la date est incomplete).
+function DateField({ value, onChange, yearTo }) {
+  const currentYear = new Date().getFullYear()
+  const to = yearTo ?? currentYear
+  const from = currentYear - 60
+  const [y, m, d] = value ? value.split('-').map(Number) : [null, null, null]
+
+  const years = []
+  for (let yr = to; yr >= from; yr--) years.push(yr)
+  const days = []
+  for (let dd = 1; dd <= daysInMonth(y, m); dd++) days.push(dd)
+
+  function emit(ny, nm, nd) {
+    if (ny && nm && nd) {
+      const safeDay = Math.min(nd, daysInMonth(ny, nm))
+      onChange(`${ny}-${String(nm).padStart(2, '0')}-${String(safeDay).padStart(2, '0')}`)
+    } else {
+      onChange('')
+    }
+  }
+
+  return (
+    <div className="date-field">
+      <select required value={d || ''} onChange={(e) => emit(y, m, Number(e.target.value) || null)}>
+        <option value="">Jour</option>
+        {days.map((dd) => <option key={dd} value={dd}>{dd}</option>)}
+      </select>
+      <select required value={m || ''} onChange={(e) => emit(y, Number(e.target.value) || null, d)}>
+        <option value="">Mois</option>
+        {MOIS_LABELS.map((name, i) => <option key={name} value={i + 1}>{name}</option>)}
+      </select>
+      <select required value={y || ''} onChange={(e) => emit(Number(e.target.value) || null, m, d)}>
+        <option value="">Année</option>
+        {years.map((yr) => <option key={yr} value={yr}>{yr}</option>)}
+      </select>
+    </div>
   )
 }
 
@@ -783,29 +834,20 @@ function UploadModal({ driver, docType, currentVersionId, pendingVersionId, onCl
               />
             </div>
 
-            <div className="grid-2">
+            <div className="field">
+              <label>Date d'emission *</label>
+              <DateField value={dateEmission} onChange={handleEmissionChange} />
+            </div>
+            {perimable ? (
               <div className="field">
-                <label>Date d'emission *</label>
-                <input
-                  type="date"
-                  value={dateEmission}
-                  onChange={(e) => handleEmissionChange(e.target.value)}
-                  required
+                <label>Date de peremption *</label>
+                <DateField
+                  value={datePeremption}
+                  onChange={handlePeremptionChange}
+                  yearTo={new Date().getFullYear() + 25}
                 />
               </div>
-              {perimable && (
-                <div className="field">
-                  <label>Date de peremption *</label>
-                  <input
-                    type="date"
-                    value={datePeremption}
-                    onChange={(e) => handlePeremptionChange(e.target.value)}
-                    required
-                  />
-                </div>
-              )}
-            </div>
-            {!perimable && (
+            ) : (
               <p className="hint">Ce document n'est pas perimable : aucune date de peremption a saisir.</p>
             )}
           </div>
@@ -1294,28 +1336,20 @@ function PublicUploadView({ token }) {
           />
         </div>
 
-        <div className="grid-2">
+        <div className="field">
+          <label>Date d'emission *</label>
+          <DateField value={dateEmission} onChange={handleEmissionChange} />
+        </div>
+        {info.est_perimable !== false && (
           <div className="field">
-            <label>Date d'emission *</label>
-            <input
-              type="date"
-              value={dateEmission}
-              onChange={(e) => handleEmissionChange(e.target.value)}
-              required
+            <label>Date de peremption *</label>
+            <DateField
+              value={datePeremption}
+              onChange={handlePeremptionChange}
+              yearTo={new Date().getFullYear() + 25}
             />
           </div>
-          {info.est_perimable !== false && (
-            <div className="field">
-              <label>Date de peremption *</label>
-              <input
-                type="date"
-                value={datePeremption}
-                onChange={(e) => handlePeremptionChange(e.target.value)}
-                required
-              />
-            </div>
-          )}
-        </div>
+        )}
 
         {submitError && <div className="error">{submitError}</div>}
 

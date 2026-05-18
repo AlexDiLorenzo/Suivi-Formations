@@ -147,6 +147,7 @@ class DashboardDocType(BaseModel):
     id: UUID
     code: str
     libelle: str
+    est_perimable: bool
     display_order: int
 
 
@@ -168,7 +169,7 @@ class DocumentVersionOut(BaseModel):
     mime_type: str
     file_size_bytes: int
     date_emission: date
-    date_peremption: date
+    date_peremption: date | None = None
     uploaded_by: str
     uploaded_at: datetime
     statut: str
@@ -220,6 +221,7 @@ class PublicDocumentRequestInfo(BaseModel):
     document_type_code: str
     document_type_libelle: str
     duree_validite_jours_default: int | None
+    est_perimable: bool
     expires_at: datetime
 
 

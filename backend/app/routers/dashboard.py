@@ -117,6 +117,20 @@ def get_dashboard(db: Annotated[Session, Depends(get_db)]):
                 counter[CellStatus.RED] += 1
                 continue
 
+            if not dt.est_perimable or current.date_peremption is None:
+                cells.append(
+                    DashboardCell(
+                        document_type_id=dt.id,
+                        status=CellStatus.GREEN,
+                        current_version_id=current.id,
+                        has_pending_version=has_pending,
+                        pending_version_id=pending_id,
+                        open_request_sent_at=open_request_at,
+                    )
+                )
+                counter[CellStatus.GREEN] += 1
+                continue
+
             days = (current.date_peremption - today).days
             if days < 0:
                 status_value = CellStatus.RED

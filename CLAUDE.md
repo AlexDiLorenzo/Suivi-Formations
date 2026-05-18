@@ -42,7 +42,7 @@ Module 1MDP de suivi des habilitations et documents des dépanneurs (permis, FCO
 | 7 | Historique versions + export PDF "état à date T" | à faire |
 | 8 | RGPD : purge configurable post-départ, log d'accès | à faire |
 | 9 | Déploiement prod (sous-domaine, TLS, sauvegardes) | 🟡 backend en ligne sur https://formations.alex-worksmart.com (TLS OK), sauvegardes Postgres restant à mettre en place |
-| 10 | Évolution modèle documentaire (~20 types, profils, scoring, attestation DocuSign) | 🟡 en cours — 10a schéma ✅ (2026-05-15), 10b profil + applicabilité ✅ (2026-05-16). Reste : 10c scoring, 10d dashboard scores, 10e intégration DocuSign |
+| 10 | Évolution modèle documentaire (~20 types, profils, scoring, attestation DocuSign) | 🟡 en cours — 10a schéma ✅ (2026-05-15), 10b profil + applicabilité ✅ (2026-05-16), gestion des docs non-périmables (upload + dashboard) ✅ (2026-05-18). Reste : 10c scoring, 10d dashboard scores, 10e intégration DocuSign |
 
 ## Conventions
 
@@ -61,6 +61,7 @@ Module 1MDP de suivi des habilitations et documents des dépanneurs (permis, FCO
 - **Préfixe `/api` côté FastAPI** : toutes les routes sont déclarées sous `/api/...` dans `app/main.py`. Le frontend tape `/api/...` directement, et nginx proxie côté prod. Si tu ajoutes un router, n'oublie pas le préfixe `/api/...`.
 - **`current_version` peut pointer vers une `pending`** en théorie. Le calcul du dashboard filtre explicitement sur `statut == VALIDATED` pour éviter qu'une version pas encore validée soit considérée comme la version active.
 - **Traefik certresolver = `le`** (pas `cloudflare`). Cf [memory reference-vps].
+- **`date_peremption` nullable** : depuis l'étape 10, un type non-périmable (`est_perimable=False`) crée des versions sans date de péremption. L'upload rend le champ optionnel et le force à `None` si le type n'est pas périmable ; le dashboard classe ces cellules vert (validé) / rouge (absent), jamais orange. Toute logique touchant `date_peremption` doit tester `is not None`.
 
 ## Commandes utiles
 

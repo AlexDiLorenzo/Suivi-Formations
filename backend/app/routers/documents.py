@@ -36,21 +36,29 @@ async def upload_document(
     driver_id: Annotated[UUID, Form()],
     document_type_id: Annotated[UUID, Form()],
     date_emission: Annotated[date, Form()],
-    date_peremption: Annotated[date, Form()],
     file: Annotated[UploadFile, File()],
+    date_peremption: Annotated[date | None, Form()] = None,
 ):
-    if date_peremption < date_emission:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="La date de peremption doit etre posterieure a la date d'emission",
-        )
-
     driver = db.get(Driver, driver_id)
     if not driver:
         raise HTTPException(status_code=404, detail="Depanneur introuvable")
     doc_type = db.get(DocumentType, document_type_id)
     if not doc_type:
         raise HTTPException(status_code=404, detail="Type de document introuvable")
+
+    if doc_type.est_perimable:
+        if date_peremption is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Ce type de document est perimable : la date de peremption est obligatoire",
+            )
+        if date_peremption < date_emission:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="La date de peremption doit etre posterieure a la date d'emission",
+            )
+    else:
+        date_peremption = None
 
     requirement = (
         db.query(DriverRequiredDocument)

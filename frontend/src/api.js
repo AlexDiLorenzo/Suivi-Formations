@@ -107,7 +107,7 @@ export const api = {
       fd.append('driver_id', driverId)
       fd.append('document_type_id', documentTypeId)
       fd.append('date_emission', dateEmission)
-      fd.append('date_peremption', datePeremption)
+      if (datePeremption) fd.append('date_peremption', datePeremption)
       fd.append('file', file)
       return uploadFormData('/documents/upload', fd)
     },
@@ -139,7 +139,7 @@ export const api = {
     upload: (token, { dateEmission, datePeremption, file }) => {
       const fd = new FormData()
       fd.append('date_emission', dateEmission)
-      fd.append('date_peremption', datePeremption)
+      if (datePeremption) fd.append('date_peremption', datePeremption)
       fd.append('file', file)
       return uploadFormData(`/public/document-requests/${token}/upload`, fd, { auth: false })
     },

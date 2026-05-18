@@ -49,6 +49,7 @@ function cellSubLabel(cell) {
   if (cell.days_until_expiry != null) {
     return `J-${cell.days_until_expiry}`
   }
+  if (cell.status === 'green') return 'Valide'
   return ''
 }
 
@@ -393,6 +394,8 @@ function UploadModal({ driver, docType, currentVersionId, pendingVersionId, onCl
     }
   }
 
+  const perimable = docType?.est_perimable !== false
+
   return (
     <div className="modal-overlay" onClick={onClose}>
       <form className="modal-card" onClick={(e) => e.stopPropagation()} onSubmit={handleSubmit}>
@@ -421,7 +424,11 @@ function UploadModal({ driver, docType, currentVersionId, pendingVersionId, onCl
                   <li>
                     Emission : <strong>{formatDateFr(pendingVersion.date_emission)}</strong>
                     {' · '}
-                    Peremption : <strong>{formatDateFr(pendingVersion.date_peremption)}</strong>
+                    {pendingVersion.date_peremption ? (
+                      <>Peremption : <strong>{formatDateFr(pendingVersion.date_peremption)}</strong></>
+                    ) : (
+                      <span className="hint">Non perimable</span>
+                    )}
                   </li>
                   <li>Fichier : {pendingVersion.original_filename} ({Math.round(pendingVersion.file_size_bytes / 1024)} ko)</li>
                 </ul>
@@ -542,16 +549,21 @@ function UploadModal({ driver, docType, currentVersionId, pendingVersionId, onCl
                   required
                 />
               </div>
-              <div className="field">
-                <label>Date de peremption *</label>
-                <input
-                  type="date"
-                  value={datePeremption}
-                  onChange={(e) => handlePeremptionChange(e.target.value)}
-                  required
-                />
-              </div>
+              {perimable && (
+                <div className="field">
+                  <label>Date de peremption *</label>
+                  <input
+                    type="date"
+                    value={datePeremption}
+                    onChange={(e) => handlePeremptionChange(e.target.value)}
+                    required
+                  />
+                </div>
+              )}
             </div>
+            {!perimable && (
+              <p className="hint">Ce document n'est pas perimable : aucune date de peremption a saisir.</p>
+            )}
           </div>
 
           {error && <div className="error">{error}</div>}
@@ -1047,15 +1059,17 @@ function PublicUploadView({ token }) {
               required
             />
           </div>
-          <div className="field">
-            <label>Date de peremption *</label>
-            <input
-              type="date"
-              value={datePeremption}
-              onChange={(e) => handlePeremptionChange(e.target.value)}
-              required
-            />
-          </div>
+          {info.est_perimable !== false && (
+            <div className="field">
+              <label>Date de peremption *</label>
+              <input
+                type="date"
+                value={datePeremption}
+                onChange={(e) => handlePeremptionChange(e.target.value)}
+                required
+              />
+            </div>
+          )}
         </div>
 
         {submitError && <div className="error">{submitError}</div>}

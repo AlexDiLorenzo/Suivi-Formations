@@ -190,7 +190,9 @@ def create_bulk_request(
     red_doc_type_ids: list[UUID] = []
     for req in requirements:
         current = current_by_doc_type.get(req.document_type_id)
-        if current is None or current.date_peremption < today:
+        if current is None:
+            red_doc_type_ids.append(req.document_type_id)
+        elif current.date_peremption is not None and current.date_peremption < today:
             red_doc_type_ids.append(req.document_type_id)
 
     if not red_doc_type_ids:
@@ -276,6 +278,7 @@ def public_get(token: str, db: Annotated[Session, Depends(get_db)]):
         document_type_code=doc_type.code,
         document_type_libelle=doc_type.libelle,
         duree_validite_jours_default=doc_type.duree_validite_jours_default,
+        est_perimable=doc_type.est_perimable,
         expires_at=req.expires_at,
     )
 
@@ -285,16 +288,29 @@ async def public_upload(
     token: str,
     db: Annotated[Session, Depends(get_db)],
     date_emission: Annotated[date, Form()],
-    date_peremption: Annotated[date, Form()],
     file: Annotated[UploadFile, File()],
+    date_peremption: Annotated[date | None, Form()] = None,
 ):
     req = _resolve_request_or_404(db, token)
 
-    if date_peremption < date_emission:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="La date de peremption doit etre posterieure a la date d'emission",
-        )
+    doc_type = db.get(DocumentType, req.document_type_id)
+    if not doc_type:
+        raise HTTPException(status_code=404, detail="Type de document introuvable")
+
+    if doc_type.est_perimable:
+        if date_peremption is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Ce type de document est perimable : la date de peremption est obligatoire",
+            )
+        if date_peremption < date_emission:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="La date de peremption doit etre posterieure a la date d'emission",
+            )
+    else:
+        date_peremption = None
+
     if file.content_type not in ("application/pdf", "application/x-pdf"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

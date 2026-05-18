@@ -123,13 +123,15 @@ def reminders_due(db: Annotated[Session, Depends(get_db)]):
             days_until: int | None = None
 
             if current is not None:
-                days_until = (current.date_peremption - today).days
-                if days_until == 90:
-                    type_to_send = REMINDER_TYPE_J90
-                elif days_until == 30:
-                    type_to_send = REMINDER_TYPE_J30
-                elif days_until == 7:
-                    type_to_send = REMINDER_TYPE_J7
+                # Document non-perimable : pas de date, donc pas de relance d'echeance.
+                if current.date_peremption is not None:
+                    days_until = (current.date_peremption - today).days
+                    if days_until == 90:
+                        type_to_send = REMINDER_TYPE_J90
+                    elif days_until == 30:
+                        type_to_send = REMINDER_TYPE_J30
+                    elif days_until == 7:
+                        type_to_send = REMINDER_TYPE_J7
             else:
                 grace = settings.never_received_grace_days
                 interval = settings.never_received_interval_days

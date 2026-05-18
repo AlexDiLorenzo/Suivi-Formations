@@ -134,6 +134,22 @@ export const api = {
         body: { driver_id: driverId },
       }),
   },
+  docusign: {
+    getEnvelope: (driverId, documentTypeId) =>
+      request(`/docusign/envelope?driver_id=${driverId}&document_type_id=${documentTypeId}`),
+    send: ({ driverId, documentTypeId, mois, annee }) =>
+      request('/docusign/send', {
+        method: 'POST',
+        body: {
+          driver_id: driverId,
+          document_type_id: documentTypeId,
+          mois,
+          annee,
+        },
+      }),
+    refresh: (envelopeId) =>
+      request(`/docusign/envelopes/${envelopeId}/refresh`, { method: 'POST' }),
+  },
   publicRequests: {
     get: (token) => request(`/public/document-requests/${token}`, { auth: false }),
     upload: (token, { dateEmission, datePeremption, file }) => {

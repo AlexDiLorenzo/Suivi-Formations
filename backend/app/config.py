@@ -37,9 +37,44 @@ class Settings(BaseSettings):
     mail_from: str = "Habilitations 1MDP <habilitations@example.com>"
     mail_reply_to: str = ""
 
+    # ---- DocuSign (signature de l'attestation sur l'honneur, etape 10e) ----
+    # Authentification JWT Grant (server-to-server). Si une des 4 valeurs
+    # ci-dessous est vide, l'integration DocuSign est consideree desactivee.
+    docusign_integration_key: str = ""
+    docusign_user_id: str = ""
+    docusign_account_id: str = ""
+    # Cle privee RSA (PEM). Peut contenir des "\n" litteraux (cas .env Docker).
+    docusign_private_key: str = ""
+    docusign_template_id: str = "6da048a0-92a0-458e-a0e8-a2ae33090940"
+    docusign_role_name: str = "Salarie"
+    # "production" -> account.docusign.com | "demo" -> account-d.docusign.com
+    docusign_env: str = "production"
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    @property
+    def docusign_enabled(self) -> bool:
+        return all(
+            [
+                self.docusign_integration_key,
+                self.docusign_user_id,
+                self.docusign_account_id,
+                self.docusign_private_key,
+                self.docusign_template_id,
+            ]
+        )
+
+    @property
+    def docusign_oauth_host(self) -> str:
+        return "account-d.docusign.com" if self.docusign_env == "demo" else "account.docusign.com"
+
+    @property
+    def docusign_private_key_pem(self) -> str:
+        # Restaure les vrais retours a la ligne si la cle a ete passee
+        # sur une seule ligne avec des "\n" echappes (frequent en .env).
+        return self.docusign_private_key.replace("\\n", "\n")
 
 
 @lru_cache

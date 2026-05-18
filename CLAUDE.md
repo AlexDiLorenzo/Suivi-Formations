@@ -25,7 +25,8 @@ Module 1MDP de suivi des habilitations et documents des dépanneurs (permis, FCO
 - **Saisie des dates manuelle** (pas d'OCR — décision explicite, à reprendre plus tard)
 - Workflow validation : `pending` → `validated` / `rejected` par l'admin
 - Versions archivées, **jamais d'écrasement** (impératif compliance URSSAF / Inspection du travail)
-- Dépanneur : **magic link à usage unique par demande**, pas de compte permanent. ⏸️ Flux conservé mais dormant (décision étape 10) — tout est admin-uploadé. Exception à venir : l'attestation sur l'honneur passera par signature DocuSign (étape 10e).
+- Dépanneur : **magic link à usage unique par demande**, pas de compte permanent. ⏸️ Flux conservé mais dormant (décision étape 10) — tout est admin-uploadé.
+- **Attestation sur l'honneur** (`ATTESTATION_PERMIS`, `mode_acquisition=docusign`) : signée via DocuSign (étape 10e). L'admin envoie l'enveloppe depuis le template `6da048a0-…` (rôle `Salarie`, l'admin choisit mois/année, défaut = mois courant) ; le dépanneur signe par email ; un clic sur « Rafraîchir le statut » importe le PDF signé comme `DocumentVersion` validée (`uploaded_by=docusign`). Auth JWT Grant, voir `app/docusign.py`.
 - App séparée de DepanTime ; import des dépanneurs via `scripts/import_drivers_from_depantime.py` (import manuel à la demande depuis un CSV, pas de sync continu).
 - Rétention par défaut 5 ans post-départ (configurable)
 
@@ -42,7 +43,7 @@ Module 1MDP de suivi des habilitations et documents des dépanneurs (permis, FCO
 | 7 | Historique versions + export PDF "état à date T" | à faire |
 | 8 | RGPD : purge configurable post-départ, log d'accès | à faire |
 | 9 | Déploiement prod (sous-domaine, TLS, sauvegardes) | 🟡 backend en ligne sur https://formations.alex-worksmart.com (TLS OK), sauvegardes Postgres restant à mettre en place |
-| 10 | Évolution modèle documentaire (~20 types, profils, scoring, attestation DocuSign) | 🟡 en cours — 10a schéma ✅ (2026-05-15), 10b profil + applicabilité ✅ (2026-05-16), gestion des docs non-périmables (upload + dashboard) ✅ (2026-05-18), 10c scoring + 10d affichage dashboard ✅ (2026-05-18). Reste : 10e intégration DocuSign |
+| 10 | Évolution modèle documentaire (~20 types, profils, scoring, attestation DocuSign) | ✅ livré — 10a schéma (2026-05-15), 10b profil + applicabilité (2026-05-16), docs non-périmables (2026-05-18), 10c scoring + 10d affichage dashboard (2026-05-18), 10e intégration DocuSign (2026-05-18) |
 
 ## Conventions
 
@@ -62,6 +63,9 @@ Module 1MDP de suivi des habilitations et documents des dépanneurs (permis, FCO
 - **`current_version` peut pointer vers une `pending`** en théorie. Le calcul du dashboard filtre explicitement sur `statut == VALIDATED` pour éviter qu'une version pas encore validée soit considérée comme la version active.
 - **Traefik certresolver = `le`** (pas `cloudflare`). Cf [memory reference-vps].
 - **`date_peremption` nullable** : depuis l'étape 10, un type non-périmable (`est_perimable=False`) crée des versions sans date de péremption. L'upload rend le champ optionnel et le force à `None` si le type n'est pas périmable ; le dashboard classe ces cellules vert (validé) / rouge (absent), jamais orange. Toute logique touchant `date_peremption` doit tester `is not None`.
+- **DocuSign désactivé par défaut** : si une des variables `DOCUSIGN_INTEGRATION_KEY/USER_ID/ACCOUNT_ID/PRIVATE_KEY` est vide, `settings.docusign_enabled` est `False` et les endpoints `/api/docusign/send` et `/refresh` renvoient `503`. La détection de signature est en **polling** (bouton « Rafraîchir »), pas de webhook Connect.
+- **Clé privée DocuSign sur une ligne** : `DOCUSIGN_PRIVATE_KEY` peut contenir des `\n` littéraux (cas `.env`) ; `config.docusign_private_key_pem` les reconvertit en vrais retours à la ligne avant signature JWT.
+- **Consentement DocuSign** : au premier appel, DocuSign peut exiger un consentement admin (`consent_required`). L'erreur remontée à l'admin contient l'URL à ouvrir une seule fois.
 
 ## Commandes utiles
 

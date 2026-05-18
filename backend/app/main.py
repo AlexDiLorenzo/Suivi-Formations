@@ -5,6 +5,7 @@ from app.config import get_settings
 from app.routers import (
     auth,
     dashboard,
+    docusign,
     document_requests,
     document_types,
     documents,
@@ -52,3 +53,4 @@ app.include_router(
     tags=["public"],
 )
 app.include_router(internal.router, prefix="/api/internal", tags=["internal"])
+app.include_router(docusign.router, prefix="/api/docusign", tags=["docusign"])

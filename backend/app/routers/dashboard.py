@@ -19,6 +19,7 @@ from app.models import (
     Driver,
     DriverRequiredDocument,
     DriverStatus,
+    SignatureEnvelope,
 )
 from app.schemas import (
     CellRedReason,
@@ -78,6 +79,16 @@ def get_dashboard(db: Annotated[Session, Depends(get_db)]):
     ):
         pending_by_pair.setdefault((doc.driver_id, doc.document_type_id), ver.id)
 
+    signature_by_pair: dict[tuple, str] = {}
+    for env in (
+        db.query(SignatureEnvelope)
+        .order_by(SignatureEnvelope.created_at.desc())
+        .all()
+    ):
+        signature_by_pair.setdefault(
+            (env.driver_id, env.document_type_id), env.status
+        )
+
     now = datetime.now(timezone.utc)
     open_request_by_pair: dict[tuple, datetime] = {}
     for req in (
@@ -100,6 +111,7 @@ def get_dashboard(db: Annotated[Session, Depends(get_db)]):
             pending_id = pending_by_pair.get((driver.id, dt.id))
             has_pending = pending_id is not None
             open_request_at = open_request_by_pair.get((driver.id, dt.id))
+            sig_status = signature_by_pair.get((driver.id, dt.id))
             if (driver.id, dt.id) not in applicable_set:
                 cells.append(DashboardCell(document_type_id=dt.id, status=CellStatus.GREY))
                 counter[CellStatus.GREY] += 1
@@ -115,6 +127,7 @@ def get_dashboard(db: Annotated[Session, Depends(get_db)]):
                         has_pending_version=has_pending,
                         pending_version_id=pending_id,
                         open_request_sent_at=open_request_at,
+                        signature_status=sig_status,
                     )
                 )
                 counter[CellStatus.RED] += 1
@@ -129,6 +142,7 @@ def get_dashboard(db: Annotated[Session, Depends(get_db)]):
                         has_pending_version=has_pending,
                         pending_version_id=pending_id,
                         open_request_sent_at=open_request_at,
+                        signature_status=sig_status,
                     )
                 )
                 counter[CellStatus.GREEN] += 1
@@ -156,6 +170,7 @@ def get_dashboard(db: Annotated[Session, Depends(get_db)]):
                     has_pending_version=has_pending,
                     pending_version_id=pending_id,
                     open_request_sent_at=open_request_at,
+                    signature_status=sig_status,
                 )
             )
             counter[status_value] += 1
@@ -186,6 +201,7 @@ def get_dashboard(db: Annotated[Session, Depends(get_db)]):
                 prenom=driver.prenom,
                 nom=driver.nom,
                 statut=driver.statut,
+                email=driver.email,
                 cells=cells,
                 score=driver_score,
             )

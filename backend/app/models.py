@@ -25,6 +25,7 @@ class DocumentVersionStatus(str, PyEnum):
 class UploadedBy(str, PyEnum):
     ADMIN = "admin"
     DRIVER = "driver"
+    DOCUSIGN = "docusign"
 
 
 class DriverProfil(str, PyEnum):
@@ -48,6 +49,24 @@ class DocumentCriticite(str, PyEnum):
 class DocumentModeAcquisition(str, PyEnum):
     UPLOAD = "upload"
     DOCUSIGN = "docusign"
+
+
+class SignatureEnvelopeStatus(str, PyEnum):
+    # Reprend les statuts DocuSign. Terminaux : COMPLETED, DECLINED, VOIDED.
+    CREATED = "created"
+    SENT = "sent"
+    DELIVERED = "delivered"
+    SIGNED = "signed"
+    COMPLETED = "completed"
+    DECLINED = "declined"
+    VOIDED = "voided"
+
+
+SIGNATURE_TERMINAL_STATUSES = {
+    SignatureEnvelopeStatus.COMPLETED.value,
+    SignatureEnvelopeStatus.DECLINED.value,
+    SignatureEnvelopeStatus.VOIDED.value,
+}
 
 
 def _uuid_pk():
@@ -178,6 +197,43 @@ class Reminder(Base):
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     channel: Mapped[str] = mapped_column(String(20), nullable=False, default="email")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class SignatureEnvelope(Base):
+    """Enveloppe DocuSign pour la signature de l'attestation sur l'honneur (etape 10e).
+
+    Une enveloppe completee est importee comme DocumentVersion validee
+    (cf. imported_version_id) — l'invariant "pas d'ecrasement" reste valable :
+    chaque renvoi cree une nouvelle enveloppe et une nouvelle version.
+    """
+
+    __tablename__ = "signature_envelopes"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    driver_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("drivers.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    document_type_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("document_types.id", ondelete="RESTRICT"), nullable=False
+    )
+    envelope_id: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    mois: Mapped[str] = mapped_column(String(20), nullable=False)
+    annee: Mapped[int] = mapped_column(Integer, nullable=False)
+    recipient_email: Mapped[str] = mapped_column(String(255), nullable=False)
+    imported_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("document_versions.id", ondelete="SET NULL"), nullable=True
+    )
+    created_by_admin_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("admin_users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class AuditLog(Base):

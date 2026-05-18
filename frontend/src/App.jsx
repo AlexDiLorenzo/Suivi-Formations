@@ -8,6 +8,24 @@ const STATUS_LABEL = {
   grey: 'Non applicable',
 }
 
+const MONTHS_FR = [
+  'JANVIER', 'FÉVRIER', 'MARS', 'AVRIL', 'MAI', 'JUIN',
+  'JUILLET', 'AOÛT', 'SEPTEMBRE', 'OCTOBRE', 'NOVEMBRE', 'DÉCEMBRE',
+]
+
+const DS_STATUS_LABEL = {
+  created: 'Créée',
+  sent: 'Envoyée, en attente de signature',
+  delivered: 'Ouverte par le dépanneur',
+  signed: 'Signée',
+  completed: 'Signée et archivée',
+  declined: 'Refusée par le dépanneur',
+  voided: 'Annulée',
+}
+
+const DS_TERMINAL = ['completed', 'declined', 'voided']
+const DS_IN_PROGRESS = ['created', 'sent', 'delivered', 'signed']
+
 const CATEGORIE_ORDER = [
   'permis_conduite',
   'caces_autorisations',
@@ -156,6 +174,7 @@ function MatrixCell({ cell, onClick }) {
   const pending = cell.has_pending_version
   const requested = !pending && cell.open_request_sent_at != null
   const requestedDays = requested ? daysSinceIso(cell.open_request_sent_at) : null
+  const signing = !pending && !requested && DS_IN_PROGRESS.includes(cell.signature_status)
 
   let visualStatus = cell.status
   let sub = cellSubLabel(cell)
@@ -169,6 +188,10 @@ function MatrixCell({ cell, onClick }) {
     visualStatus = 'requested'
     sub = requestedDays === 0 ? 'Demande aujourd\'hui' : `Demande il y a ${requestedDays}j`
     tooltip = `Demande envoyee il y a ${requestedDays}j, en attente de reponse — clique pour relancer ou uploader`
+  } else if (signing) {
+    visualStatus = 'requested'
+    sub = 'Signature en cours'
+    tooltip = 'Attestation envoyee pour signature DocuSign — clique pour suivre le statut'
   }
 
   return (
@@ -263,7 +286,10 @@ function DashboardView({ docTypes }) {
           docType={uploadCtx.docType}
           currentVersionId={uploadCtx.currentVersionId}
           pendingVersionId={uploadCtx.pendingVersionId}
-          onClose={() => setUploadCtx(null)}
+          onClose={() => {
+            setUploadCtx(null)
+            reload()
+          }}
           onUploaded={() => {
             setUploadCtx(null)
             reload()
@@ -271,6 +297,131 @@ function DashboardView({ docTypes }) {
         />
       )}
     </>
+  )
+}
+
+function DocusignSection({ driver, docType }) {
+  const now = new Date()
+  const [envelope, setEnvelope] = useState(undefined) // undefined = chargement, null = aucune
+  const [mois, setMois] = useState(MONTHS_FR[now.getMonth()])
+  const [annee, setAnnee] = useState(now.getFullYear())
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    api.docusign
+      .getEnvelope(driver.id, docType.id)
+      .then((e) => setEnvelope(e))
+      .catch((err) => {
+        setEnvelope(null)
+        setError(err.detail || String(err))
+      })
+  }, [driver.id, docType.id])
+
+  const inProgress = envelope && DS_IN_PROGRESS.includes(envelope.status)
+
+  async function handleSend() {
+    setError('')
+    setBusy(true)
+    try {
+      const e = await api.docusign.send({
+        driverId: driver.id,
+        documentTypeId: docType.id,
+        mois,
+        annee,
+      })
+      setEnvelope(e)
+    } catch (err) {
+      setError(err.detail || 'Erreur lors de l\'envoi DocuSign')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleRefresh() {
+    setError('')
+    setBusy(true)
+    try {
+      const e = await api.docusign.refresh(envelope.id)
+      setEnvelope(e)
+    } catch (err) {
+      setError(err.detail || 'Erreur lors du rafraichissement du statut')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="section">
+      <h3>Signature DocuSign</h3>
+      <p className="hint">
+        L'attestation sur l'honneur est signee electroniquement par le
+        depanneur via DocuSign : il recoit un email, signe, et le document
+        signe est archive automatiquement ici.
+      </p>
+
+      {error && <div className="error">{error}</div>}
+
+      {envelope === undefined && <p className="hint">Chargement…</p>}
+
+      {envelope && (
+        <div className={`ds-status ds-${envelope.status}`}>
+          <strong>{DS_STATUS_LABEL[envelope.status] || envelope.status}</strong>
+          <span className="ds-meta">
+            {envelope.mois} {envelope.annee} · {envelope.recipient_email}
+          </span>
+          {inProgress && (
+            <button
+              type="button"
+              className="btn btn-sm"
+              onClick={handleRefresh}
+              disabled={busy}
+            >
+              {busy ? '…' : 'Rafraichir le statut'}
+            </button>
+          )}
+        </div>
+      )}
+
+      {envelope !== undefined && !inProgress && (
+        !driver.email ? (
+          <div className="email-status warn">
+            Ce depanneur n'a pas d'email — ajoute-le dans sa fiche avant
+            d'envoyer l'attestation a signer.
+          </div>
+        ) : (
+          <>
+            <div className="grid-2">
+              <div className="field">
+                <label>Mois</label>
+                <select value={mois} onChange={(e) => setMois(e.target.value)}>
+                  {MONTHS_FR.map((m) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label>Annee</label>
+                <input
+                  type="number"
+                  value={annee}
+                  min="2000"
+                  max="2100"
+                  onChange={(e) => setAnnee(Number(e.target.value))}
+                />
+              </div>
+            </div>
+            <button type="button" className="btn" onClick={handleSend} disabled={busy}>
+              {busy
+                ? 'Envoi…'
+                : envelope
+                  ? 'Renvoyer pour signature'
+                  : 'Envoyer pour signature'}
+            </button>
+          </>
+        )
+      )}
+    </div>
   )
 }
 
@@ -500,6 +651,9 @@ function UploadModal({ driver, docType, currentVersionId, pendingVersionId, onCl
             </div>
           )}
 
+          {docType?.mode_acquisition === 'docusign' ? (
+            <DocusignSection driver={driver} docType={docType} />
+          ) : (
           <div className="section">
             <h3>Demander au depanneur</h3>
             <p className="hint">
@@ -542,6 +696,7 @@ function UploadModal({ driver, docType, currentVersionId, pendingVersionId, onCl
               </>
             )}
           </div>
+          )}
 
           <div className="section">
             <h3>{currentVersionId ? 'Nouvelle version (admin)' : 'Premier upload (admin)'}</h3>
@@ -946,6 +1101,7 @@ function NavBar({ view, onChangeView, me, onLogout }) {
   return (
     <header className="app-header">
       <div className="brand">
+        <img src="/logo.png" className="brand-logo" alt="1MDP" />
         <h1>Habilitations</h1>
         <nav className="tabs">
           <button

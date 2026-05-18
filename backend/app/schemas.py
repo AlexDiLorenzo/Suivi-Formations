@@ -132,6 +132,7 @@ class DashboardCell(BaseModel):
     has_pending_version: bool = False
     pending_version_id: UUID | None = None
     open_request_sent_at: datetime | None = None
+    signature_status: str | None = None
 
 
 class DashboardDriver(BaseModel):
@@ -139,6 +140,7 @@ class DashboardDriver(BaseModel):
     prenom: str
     nom: str
     statut: str
+    email: str | None = None
     cells: list[DashboardCell]
     score: int | None = None
 
@@ -256,3 +258,25 @@ class SkippedReminderItem(BaseModel):
 class DueRemindersResponse(BaseModel):
     items: list[DueReminderItem]
     skipped: list[SkippedReminderItem]
+
+
+class DocusignSendRequest(BaseModel):
+    driver_id: UUID
+    document_type_id: UUID
+    mois: str = Field(min_length=1, max_length=20)
+    annee: int = Field(ge=2000, le=2100)
+
+
+class SignatureEnvelopeOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    driver_id: UUID
+    document_type_id: UUID
+    envelope_id: str
+    status: str
+    mois: str
+    annee: int
+    recipient_email: str
+    imported_version_id: UUID | None = None
+    created_at: datetime
+    completed_at: datetime | None = None

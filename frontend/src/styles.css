@@ -142,7 +142,13 @@ a {
 .app-header .brand {
   display: flex;
   align-items: center;
-  gap: 32px;
+  gap: 24px;
+}
+
+.brand-logo {
+  height: 34px;
+  width: auto;
+  display: block;
 }
 
 .app-header h1 {
@@ -688,6 +694,45 @@ input[type="file"]::file-selector-button:hover {
   background: rgba(217, 122, 31, 0.10);
   color: var(--c-status-orange);
   border: 1px solid rgba(217, 122, 31, 0.25);
+}
+
+/* ---------------- DocuSign ---------------- */
+
+.ds-status {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+  background: #F4F3EE;
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+
+.ds-status .ds-meta {
+  font-size: 12px;
+  color: var(--c-text-muted);
+}
+
+.ds-status.ds-completed {
+  border-color: var(--c-status-green);
+  background: rgba(44, 97, 38, 0.08);
+}
+
+.ds-status.ds-declined,
+.ds-status.ds-voided {
+  border-color: var(--c-status-red);
+  background: rgba(163, 45, 45, 0.08);
+}
+
+.ds-status.ds-created,
+.ds-status.ds-sent,
+.ds-status.ds-delivered,
+.ds-status.ds-signed {
+  border-color: var(--c-status-blue);
+  background: rgba(79, 109, 154, 0.08);
 }
 
 /* ---------------- Public upload page ---------------- */

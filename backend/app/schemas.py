@@ -140,6 +140,7 @@ class DashboardDriver(BaseModel):
     nom: str
     statut: str
     cells: list[DashboardCell]
+    score: int | None = None
 
 
 class DashboardDocType(BaseModel):
@@ -153,6 +154,7 @@ class DashboardDocType(BaseModel):
 
 class DashboardSummary(BaseModel):
     by_status: dict[CellStatus, int]
+    score_global: int | None = None
 
 
 class DashboardResponse(BaseModel):

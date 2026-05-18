@@ -53,6 +53,13 @@ function cellSubLabel(cell) {
   return ''
 }
 
+function scoreClass(score) {
+  if (score == null) return 'grey'
+  if (score >= 90) return 'green'
+  if (score >= 60) return 'orange'
+  return 'red'
+}
+
 // =====================================================================
 // Login
 // =====================================================================
@@ -118,10 +125,21 @@ function LoginView({ onLogin }) {
 // Dashboard
 // =====================================================================
 
+function ScoreBadge({ score }) {
+  if (score == null) return <span className="score-badge grey">—</span>
+  return <span className={`score-badge ${scoreClass(score)}`}>{score}%</span>
+}
+
 function SummaryBar({ summary }) {
   const order = ['green', 'orange', 'red', 'grey']
   return (
     <div className="summary">
+      {summary.score_global != null && (
+        <span className={`summary-pill score-pill ${scoreClass(summary.score_global)}`}>
+          Conformité globale
+          <span className="count">{summary.score_global}%</span>
+        </span>
+      )}
       {order.map((s) => (
         <span className="summary-pill" key={s}>
           <span className={`dot ${s}`} />
@@ -210,6 +228,7 @@ function DashboardView({ docTypes }) {
             <thead>
               <tr>
                 <th className="driver-col">Depanneur</th>
+                <th className="score-col">Score</th>
                 {data.doc_types.map((dt) => (
                   <th key={dt.id}>{dt.libelle}</th>
                 ))}
@@ -220,6 +239,9 @@ function DashboardView({ docTypes }) {
                 <tr key={d.id}>
                   <td className="driver-col">
                     <strong>{d.nom}</strong> {d.prenom}
+                  </td>
+                  <td className="score-col">
+                    <ScoreBadge score={d.score} />
                   </td>
                   {d.cells.map((c) => (
                     <MatrixCell

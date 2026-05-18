@@ -326,6 +326,45 @@ td.cell .sub {
   margin-top: 2px;
 }
 
+table.matrix th.score-col, table.matrix td.score-col {
+  position: sticky;
+  left: 200px;
+  background: white;
+  border-right: 1px solid var(--c-border);
+  text-align: center;
+  min-width: 84px;
+}
+
+table.matrix thead th.score-col {
+  background: #F4F3EE;
+}
+
+.score-badge {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: white;
+}
+
+.score-badge.green  { background: var(--c-status-green); }
+.score-badge.orange { background: var(--c-status-orange); }
+.score-badge.red    { background: var(--c-status-red); }
+.score-badge.grey   { background: var(--c-status-grey); color: var(--c-text-muted); }
+
+.summary-pill.score-pill {
+  color: white;
+  font-weight: 600;
+  border: none;
+}
+
+.summary-pill.score-pill.green  { background: var(--c-status-green); }
+.summary-pill.score-pill.orange { background: var(--c-status-orange); }
+.summary-pill.score-pill.red    { background: var(--c-status-red); }
+.summary-pill.score-pill.grey   { background: var(--c-status-grey); color: var(--c-text-muted); }
+
 .empty {
   padding: 40px;
   text-align: center;

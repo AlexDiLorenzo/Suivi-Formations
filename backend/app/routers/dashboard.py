@@ -11,6 +11,7 @@ from app.db import get_db
 from app.deps import get_current_admin
 from app.models import (
     Document,
+    DocumentCriticite,
     DocumentRequest,
     DocumentType,
     DocumentVersion,
@@ -90,6 +91,8 @@ def get_dashboard(db: Annotated[Session, Depends(get_db)]):
 
     counter: Counter = Counter()
     out_drivers: list[DashboardDriver] = []
+    global_applicable_weight = 0
+    global_compliant_weight = 0
 
     for driver in drivers:
         cells: list[DashboardCell] = []
@@ -157,6 +160,26 @@ def get_dashboard(db: Annotated[Session, Depends(get_db)]):
             )
             counter[status_value] += 1
 
+        # Score de conformite : poids critique x3 / standard x1.
+        # Conforme = cellule verte ou orange (doc valide) ; rouge = non conforme ;
+        # grise (non applicable) exclue du calcul.
+        applicable_weight = 0
+        compliant_weight = 0
+        for dt, cell in zip(doc_types, cells):
+            if cell.status == CellStatus.GREY:
+                continue
+            weight = 3 if dt.criticite == DocumentCriticite.CRITIQUE.value else 1
+            applicable_weight += weight
+            if cell.status in (CellStatus.GREEN, CellStatus.ORANGE):
+                compliant_weight += weight
+        global_applicable_weight += applicable_weight
+        global_compliant_weight += compliant_weight
+        driver_score = (
+            round(compliant_weight / applicable_weight * 100)
+            if applicable_weight
+            else None
+        )
+
         out_drivers.append(
             DashboardDriver(
                 id=driver.id,
@@ -164,16 +187,23 @@ def get_dashboard(db: Annotated[Session, Depends(get_db)]):
                 nom=driver.nom,
                 statut=driver.statut,
                 cells=cells,
+                score=driver_score,
             )
         )
 
+    score_global = (
+        round(global_compliant_weight / global_applicable_weight * 100)
+        if global_applicable_weight
+        else None
+    )
     summary = DashboardSummary(
         by_status={
             CellStatus.GREEN: counter[CellStatus.GREEN],
             CellStatus.ORANGE: counter[CellStatus.ORANGE],
             CellStatus.RED: counter[CellStatus.RED],
             CellStatus.GREY: counter[CellStatus.GREY],
-        }
+        },
+        score_global=score_global,
     )
 
     return DashboardResponse(

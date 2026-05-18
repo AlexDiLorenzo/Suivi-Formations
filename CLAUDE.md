@@ -21,7 +21,7 @@ Module 1MDP de suivi des habilitations et documents des dépanneurs (permis, FCO
   - **Gris** : non applicable pour ce dépanneur
   - Documents **non-périmables** (RIB, CV, diplômes…) : pas de date → vert si validé, rouge si applicable et absent (jamais orange)
 - Applicabilité par dépanneur via `driver_required_documents`. Le champ `profil` du dépanneur (permis B / permis C-CE) pré-coche les documents par défaut via `app/profils.py` ; l'admin ajuste ensuite case par case.
-- **Scoring** (étape 10c) : score de conformité par dépanneur, pondéré critique (×3) / standard (×1), + taux global.
+- **Scoring** (étape 10c/10d) : score de conformité par dépanneur (0-100 %), pondéré critique (×3) / standard (×1), + taux global. Conforme = cellule **verte ou orange** (le doc est valide) ; rouge = non conforme ; gris exclu du calcul. Affiché dans une colonne « Score » du dashboard + pastille « Conformité globale ».
 - **Saisie des dates manuelle** (pas d'OCR — décision explicite, à reprendre plus tard)
 - Workflow validation : `pending` → `validated` / `rejected` par l'admin
 - Versions archivées, **jamais d'écrasement** (impératif compliance URSSAF / Inspection du travail)
@@ -42,7 +42,7 @@ Module 1MDP de suivi des habilitations et documents des dépanneurs (permis, FCO
 | 7 | Historique versions + export PDF "état à date T" | à faire |
 | 8 | RGPD : purge configurable post-départ, log d'accès | à faire |
 | 9 | Déploiement prod (sous-domaine, TLS, sauvegardes) | 🟡 backend en ligne sur https://formations.alex-worksmart.com (TLS OK), sauvegardes Postgres restant à mettre en place |
-| 10 | Évolution modèle documentaire (~20 types, profils, scoring, attestation DocuSign) | 🟡 en cours — 10a schéma ✅ (2026-05-15), 10b profil + applicabilité ✅ (2026-05-16), gestion des docs non-périmables (upload + dashboard) ✅ (2026-05-18). Reste : 10c scoring, 10d dashboard scores, 10e intégration DocuSign |
+| 10 | Évolution modèle documentaire (~20 types, profils, scoring, attestation DocuSign) | 🟡 en cours — 10a schéma ✅ (2026-05-15), 10b profil + applicabilité ✅ (2026-05-16), gestion des docs non-périmables (upload + dashboard) ✅ (2026-05-18), 10c scoring + 10d affichage dashboard ✅ (2026-05-18). Reste : 10e intégration DocuSign |
 
 ## Conventions
 

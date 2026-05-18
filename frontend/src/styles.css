@@ -228,11 +228,69 @@ a {
 .dot.red    { background: var(--c-status-red); }
 .dot.grey   { background: var(--c-status-grey); }
 
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.filter-label {
+  font-size: 13px;
+  color: var(--c-text-muted);
+  margin-right: 4px;
+}
+
+.filter-btn {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--c-border);
+  border-radius: 999px;
+  background: white;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--c-black);
+  cursor: pointer;
+}
+
+.filter-btn:hover {
+  border-color: var(--c-text-muted);
+}
+
+.filter-btn.active {
+  border-color: var(--c-black);
+  font-weight: 600;
+}
+
+.filter-btn.active.green {
+  background: rgba(44, 97, 38, 0.12);
+  border-color: var(--c-status-green);
+}
+
+.filter-btn.active.orange {
+  background: rgba(217, 122, 31, 0.12);
+  border-color: var(--c-status-orange);
+}
+
+.filter-btn.active.red {
+  background: rgba(163, 45, 45, 0.12);
+  border-color: var(--c-status-red);
+}
+
+.filter-btn .filter-count {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 12px;
+}
+
 .matrix-wrap {
   overflow: auto;
   /* Hauteur bornee : la matrice defile d'elle-meme, ce qui permet a
      l'en-tete (thead sticky) et a la colonne depanneur de rester figes. */
-  max-height: calc(100vh - 185px);
+  max-height: calc(100vh - 235px);
   border: 1px solid var(--c-border);
   border-radius: 6px;
   background: white;

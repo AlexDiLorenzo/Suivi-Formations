@@ -212,10 +212,36 @@ function MatrixCell({ cell, onClick }) {
   )
 }
 
+function ScoreFilterBar({ value, counts, onChange }) {
+  const bands = [
+    { key: 'all', label: 'Tous' },
+    { key: 'green', label: '≥ 90 %' },
+    { key: 'orange', label: '60–89 %' },
+    { key: 'red', label: '< 60 %' },
+  ]
+  return (
+    <div className="filter-bar">
+      <span className="filter-label">Conformité</span>
+      {bands.map((b) => (
+        <button
+          key={b.key}
+          type="button"
+          className={`filter-btn ${b.key} ${value === b.key ? 'active' : ''}`}
+          onClick={() => onChange(b.key)}
+        >
+          {b.label}
+          {b.key !== 'all' && <span className="filter-count">{counts[b.key]}</span>}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 function DashboardView({ docTypes }) {
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
   const [uploadCtx, setUploadCtx] = useState(null)
+  const [scoreFilter, setScoreFilter] = useState('all')
   const matrixRef = useRef(null)
 
   function reload() {
@@ -245,12 +271,22 @@ function DashboardView({ docTypes }) {
     }
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
-  }, [data])
+  }, [data, scoreFilter])
 
   if (error) return <div className="error" style={{ padding: 24 }}>{error}</div>
   if (!data) return <div className="empty">Chargement…</div>
 
   const docTypeById = Object.fromEntries(docTypes.map((dt) => [dt.id, dt]))
+
+  const bandCounts = { green: 0, orange: 0, red: 0 }
+  for (const d of data.drivers) {
+    const band = scoreClass(d.score)
+    if (band in bandCounts) bandCounts[band] += 1
+  }
+  const visibleDrivers =
+    scoreFilter === 'all'
+      ? data.drivers
+      : data.drivers.filter((d) => scoreClass(d.score) === scoreFilter)
 
   function openUpload(driver, cell) {
     setUploadCtx({
@@ -270,38 +306,45 @@ function DashboardView({ docTypes }) {
           <code>scripts.seed_demo</code> en dev.
         </div>
       ) : (
-        <div className="matrix-wrap" ref={matrixRef}>
-          <table className="matrix">
-            <thead>
-              <tr>
-                <th className="driver-col">Depanneur</th>
-                <th className="score-col">Score</th>
-                {data.doc_types.map((dt) => (
-                  <th key={dt.id}>{dt.libelle}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {data.drivers.map((d) => (
-                <tr key={d.id}>
-                  <td className="driver-col">
-                    <strong>{d.nom}</strong> {d.prenom}
-                  </td>
-                  <td className="score-col">
-                    <ScoreBadge score={d.score} />
-                  </td>
-                  {d.cells.map((c) => (
-                    <MatrixCell
-                      key={c.document_type_id}
-                      cell={c}
-                      onClick={() => openUpload(d, c)}
-                    />
+        <>
+          <ScoreFilterBar value={scoreFilter} counts={bandCounts} onChange={setScoreFilter} />
+          {visibleDrivers.length === 0 ? (
+            <div className="empty">Aucun depanneur a ce niveau de conformite.</div>
+          ) : (
+            <div className="matrix-wrap" ref={matrixRef}>
+              <table className="matrix">
+                <thead>
+                  <tr>
+                    <th className="driver-col">Depanneur</th>
+                    <th className="score-col">Score</th>
+                    {data.doc_types.map((dt) => (
+                      <th key={dt.id}>{dt.libelle}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleDrivers.map((d) => (
+                    <tr key={d.id}>
+                      <td className="driver-col">
+                        <strong>{d.nom}</strong> {d.prenom}
+                      </td>
+                      <td className="score-col">
+                        <ScoreBadge score={d.score} />
+                      </td>
+                      {d.cells.map((c) => (
+                        <MatrixCell
+                          key={c.document_type_id}
+                          cell={c}
+                          onClick={() => openUpload(d, c)}
+                        />
+                      ))}
+                    </tr>
                   ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
       )}
 
       {uploadCtx && (

@@ -2,8 +2,10 @@
 
 Idempotent : upsert par code (cree si absent, met a jour sinon). Les types dont
 le code n'est plus dans la liste sont supprimes — nettoyage des anciens types.
-La suppression echoue si des documents y sont encore rattaches (FK RESTRICT) :
-c'est voulu, on ne supprime pas un type encore utilise.
+Les applicabilites (driver_required_documents) d'un type obsolete sont purgees
+automatiquement (ce ne sont que de la config). En revanche la suppression echoue
+si des documents reels y sont encore rattaches (FK RESTRICT) : c'est voulu, on
+ne detruit pas des fichiers de conformite en silence.
 """
 from app.db import SessionLocal
 from app.models import (
@@ -11,6 +13,7 @@ from app.models import (
     DocumentCriticite,
     DocumentModeAcquisition,
     DocumentType,
+    DriverRequiredDocument,
 )
 
 
@@ -46,7 +49,6 @@ SEEDS = [
     _t("CACES_CHARIOT", "CACES chariot elevateur", _C.CACES_AUTORISATIONS, perimable=True, duree=5 * AN, criticite=_CRIT, ordre=70),
     _t("AUTORISATION_CONDUITE", "Autorisation de conduite (entreprise)", _C.CACES_AUTORISATIONS, perimable=True, duree=5 * AN, criticite=_CRIT, ordre=80),
     _t("FORMATION_INITIALE", "Formation initiale (interne)", _C.FORMATIONS_INTERNES, perimable=False, ordre=90),
-    _t("FORMATION_SECURITE", "Formation complementaire / securite", _C.FORMATIONS_INTERNES, perimable=False, ordre=100),
     _t("VINCI_EMA", "VINCI EMA", _C.FORMATIONS_INTERNES, perimable=False, ordre=110),
     _t("VINCI_AVA", "VINCI AVA", _C.FORMATIONS_INTERNES, perimable=False, ordre=120),
     _t("DIPLOMES", "Diplomes & titres (CAP, BEP, Bac Pro, BTS)", _C.DIPLOMES, perimable=False, ordre=130),
@@ -74,8 +76,13 @@ def main() -> None:
                 db.add(DocumentType(**seed))
                 print(f"+ {seed['code']}")
         for obsolete in db.query(DocumentType).filter(~DocumentType.code.in_(codes)).all():
+            # Les applicabilites sont de la config : on les purge pour ne pas
+            # bloquer la suppression. Les documents reels gardent leur FK RESTRICT.
+            db.query(DriverRequiredDocument).filter(
+                DriverRequiredDocument.document_type_id == obsolete.id
+            ).delete(synchronize_session=False)
             db.delete(obsolete)
-            print(f"- {obsolete.code} supprime (obsolete)")
+            print(f"- {obsolete.code} supprime (obsolete, applicabilites purgees)")
         db.commit()
         print(f"\n{len(SEEDS)} types en place.")
     finally:

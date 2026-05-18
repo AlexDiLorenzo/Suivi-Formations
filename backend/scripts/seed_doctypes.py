@@ -40,7 +40,7 @@ _CRIT = DocumentCriticite.CRITIQUE
 _DOCUSIGN = DocumentModeAcquisition.DOCUSIGN
 
 SEEDS = [
-    _t("PERMIS", "Permis de conduire", _C.PERMIS_CONDUITE, perimable=True, duree=5 * AN, criticite=_CRIT, ordre=10),
+    _t("PERMIS", "Permis de conduire", _C.PERMIS_CONDUITE, perimable=True, duree=15 * AN, criticite=_CRIT, ordre=10),
     _t("ATTESTATION_PERMIS", "Attestation sur l'honneur de validite du permis", _C.PERMIS_CONDUITE, perimable=True, duree=90, mode=_DOCUSIGN, ordre=20),
     _t("FIMO_FCO", "FIMO / FCO", _C.PERMIS_CONDUITE, perimable=True, duree=5 * AN, criticite=_CRIT, ordre=30),
     _t("B2XL", "B2XL", _C.PERMIS_CONDUITE, perimable=True, duree=3 * AN, criticite=_CRIT, ordre=40),

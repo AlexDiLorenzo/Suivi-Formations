@@ -42,3 +42,20 @@ def verify_internal_secret(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Header X-Internal-Secret manquant ou invalide",
         )
+
+
+def verify_pilotage_secret(
+    x_pilotage_secret: Annotated[str | None, Header(alias="X-Pilotage-Secret")] = None,
+) -> None:
+    """Garde pour /api/pilotage/* appele par le dashboard de pilotage du site web."""
+    expected = get_settings().pilotage_secret
+    if not expected:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Endpoint pilotage desactive (PILOTAGE_SECRET non configure)",
+        )
+    if not x_pilotage_secret or not secrets.compare_digest(x_pilotage_secret, expected):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Header X-Pilotage-Secret manquant ou invalide",
+        )

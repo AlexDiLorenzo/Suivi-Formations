@@ -22,6 +22,11 @@ class Settings(BaseSettings):
     # Si vide, les endpoints internes sont desactives.
     reminders_secret: str = ""
 
+    # Secret partage avec le dashboard de pilotage du site web. Protege
+    # GET /api/pilotage/snapshot (taux de conformite global). Si vide,
+    # l'endpoint est desactive (503).
+    pilotage_secret: str = ""
+
     # Base URL du frontend, utilisee pour construire les magic_link
     # dans les emails de relance (n8n appelle l'API mais le mail doit
     # pointer vers le frontend).

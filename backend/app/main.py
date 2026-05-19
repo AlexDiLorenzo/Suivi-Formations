@@ -11,6 +11,7 @@ from app.routers import (
     documents,
     drivers,
     internal,
+    pilotage,
     profils,
     requirements,
 )
@@ -53,4 +54,5 @@ app.include_router(
     tags=["public"],
 )
 app.include_router(internal.router, prefix="/api/internal", tags=["internal"])
+app.include_router(pilotage.router, prefix="/api/pilotage", tags=["pilotage"])
 app.include_router(docusign.router, prefix="/api/docusign", tags=["docusign"])

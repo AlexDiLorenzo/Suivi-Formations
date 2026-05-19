@@ -29,6 +29,7 @@ services:
       FILE_ENCRYPTION_KEY: ${FILE_ENCRYPTION_KEY}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
       REMINDERS_SECRET: ${REMINDERS_SECRET:-}
+      PILOTAGE_SECRET: ${PILOTAGE_SECRET:-}
       FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-http://localhost:5173}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       MAIL_FROM: ${MAIL_FROM:-Habilitations 1MDP <habilitations@example.com>}

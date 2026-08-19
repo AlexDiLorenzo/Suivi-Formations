@@ -186,7 +186,7 @@ function LoginView({ onLogin }) {
           borderRadius: 6, fontSize: 11, color: T.encre, fontWeight: 700,
           textAlign: 'center',
         }}>
-          24 / 7 &middot; DEPANNAGE MONTPELLIER
+          24 / 7 · DÉPANNAGE MONTPELLIER
         </div>
       </form>
     </div>

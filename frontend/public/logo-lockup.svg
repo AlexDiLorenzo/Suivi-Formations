@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 120" role="img" aria-label="Montpellier Dépannage">
+  <defs>
+    <clipPath id="oval">
+      <ellipse cx="160" cy="60" rx="156" ry="56"></ellipse>
+    </clipPath>
+  </defs>
+  <ellipse cx="160" cy="60" rx="156" ry="56" fill="#2C6126"></ellipse>
+  <ellipse cx="160" cy="60" rx="150" ry="50" fill="none" stroke="#1A190F" stroke-width="2"></ellipse>
+  <g clip-path="url(#oval)" font-family="&#39;Space Mono&#39;, monospace" text-anchor="middle" fill="#E4E13C">
+    <text x="160" y="52" font-size="26" font-weight="700" letter-spacing="2">MONTPELLIER</text>
+    <text x="160" y="88" font-size="26" font-weight="700" letter-spacing="3">DÉPANNAGE</text>
+  </g>
+</svg>

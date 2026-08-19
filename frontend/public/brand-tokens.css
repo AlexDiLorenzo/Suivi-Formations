@@ -1,0 +1,252 @@
+/* ============================================================
+   MONTPELLIER DÉPANNAGE — DESIGN TOKENS
+   Palette dérivée du logo (vert forêt + jaune signalisation)
+   + Système typographique (DM Sans / Space Mono / JetBrains Mono)
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+:root {
+  /* ---- Couleurs mères (extraites du logo) ---- */
+  --md-brand-green:  #2C6126;
+  --md-brand-yellow: #E4E13C;
+  --md-brand-black:  #1A190F;
+
+  /* ---- Vert forêt (primary) ---- */
+  --md-forest-50:  #F1F7EC;
+  --md-forest-100: #DCEBCB;
+  --md-forest-200: #B8D79B;
+  --md-forest-300: #8FBE6A;
+  --md-forest-400: #64A142;
+  --md-forest-500: #3E7F2C;
+  --md-forest-600: #2C6126;  /* ★ teinte du logo */
+  --md-forest-700: #255420;
+  --md-forest-800: #1F4A1D;
+  --md-forest-900: #123211;
+
+  /* ---- Jaune signalisation (accent) ---- */
+  --md-signal-50:  #FDFCE8;
+  --md-signal-100: #F9F6B8;
+  --md-signal-200: #F3EC7E;
+  --md-signal-300: #E4E13C;  /* ★ teinte du logo — fond uniquement */
+  --md-signal-400: #C6C22B;
+  --md-signal-500: #A09D1E;
+  --md-signal-600: #7A7814;
+  --md-signal-800: #5C5A11;
+  --md-signal-900: #3D3B0B;
+
+  /* ---- Neutres chauds (textes, bordures) ---- */
+  --md-stone-50:  #FAFAF7;
+  --md-stone-100: #F1EFE8;
+  --md-stone-200: #D3D1C7;
+  --md-stone-300: #B4B2A9;
+  --md-stone-400: #888780;
+  --md-stone-500: #5F5E5A;
+  --md-stone-600: #444441;
+  --md-stone-800: #2C2C2A;
+  --md-stone-900: #1A190F;  /* ★ noir du logo */
+
+  /* ---- Sémantique (états UI) ---- */
+  --md-success:    var(--md-forest-600);
+  --md-success-bg: var(--md-forest-50);
+  --md-warning:    var(--md-signal-500);
+  --md-warning-bg: var(--md-signal-50);
+  --md-danger:     #A32D2D;
+  --md-danger-bg:  #FCEBEB;
+  --md-info:       #185FA5;
+  --md-info-bg:    #E6F1FB;
+
+  /* ---- Alias sémantiques (recommandés dans le code) ---- */
+  --color-primary:        var(--md-forest-600);
+  --color-primary-hover:  var(--md-forest-500);
+  --color-primary-active: var(--md-forest-700);
+  --color-accent:         var(--md-signal-300);
+  --color-accent-hover:   var(--md-signal-400);
+  --color-text:           var(--md-stone-900);
+  --color-text-muted:     var(--md-stone-500);
+  --color-bg:             #FFFFFF;
+  --color-bg-subtle:      var(--md-stone-50);
+  --color-border:         var(--md-stone-200);
+
+  /* ============================================================
+     TYPE — familles + rôles
+     ============================================================ */
+  --font-sans:    'DM Sans', system-ui, -apple-system, sans-serif;
+  --font-display: 'Space Mono', 'DM Sans', monospace;
+  --font-mono:    'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
+
+  /* Weights */
+  --fw-regular:  400;
+  --fw-medium:   500;
+  --fw-semibold: 600;
+  --fw-bold:     700;
+
+  /* Sizes */
+  --fs-xs:   11px;
+  --fs-sm:   12px;
+  --fs-base: 13px;
+  --fs-md:   14px;
+  --fs-lg:   16px;
+  --fs-xl:   20px;
+  --fs-2xl:  24px;
+  --fs-3xl:  32px;
+  --fs-4xl:  44px;
+  --fs-5xl:  60px;
+
+  /* Line-heights */
+  --lh-tight:  1.15;
+  --lh-snug:   1.3;
+  --lh-normal: 1.5;
+  --lh-relaxed: 1.7;
+
+  /* Tracking */
+  --tr-tight:   -0.02em;
+  --tr-normal:   0;
+  --tr-caps:     0.07em;
+  --tr-overline: 0.1em;
+
+  /* ---- Spacing (4px base) ---- */
+  --sp-1:  4px;
+  --sp-2:  8px;
+  --sp-3:  12px;
+  --sp-4:  16px;
+  --sp-5:  20px;
+  --sp-6:  24px;
+  --sp-8:  32px;
+  --sp-10: 40px;
+  --sp-12: 48px;
+  --sp-16: 64px;
+
+  /* ---- Radii ---- */
+  --radius-xs:    4px;
+  --radius-sm:    6px;
+  --radius-md:    8px;
+  --radius-lg:    10px;
+  --radius-xl:    12px;
+  --radius-2xl:   16px;
+  --radius-pill:  999px;
+
+  /* ---- Elevation ---- */
+  --shadow-xs: 0 1px 2px rgba(26,25,15,0.04);
+  --shadow-sm: 0 1px 3px rgba(26,25,15,0.06);
+  --shadow-md: 0 4px 14px rgba(26,25,15,0.08);
+  --shadow-lg: 0 10px 40px rgba(26,25,15,0.15);
+  --shadow-primary: 0 4px 14px rgba(44,97,38,0.30);
+  --shadow-accent:  0 4px 14px rgba(228,225,60,0.35);
+
+  /* ---- Motion ---- */
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out:      cubic-bezier(0.0, 0, 0.2, 1);
+  --dur-fast:      120ms;
+  --dur-base:      150ms;
+  --dur-slow:      240ms;
+}
+
+/* ============================================================
+   TYPE ROLES — reusable class selectors
+   ============================================================ */
+
+/* Display / hero — Space Mono for technical-utility feel */
+.md-display {
+  font-family: var(--font-display);
+  font-weight: var(--fw-bold);
+  font-size: var(--fs-4xl);
+  line-height: var(--lh-tight);
+  letter-spacing: var(--tr-tight);
+  color: var(--color-text);
+}
+
+/* H1 — page title */
+.md-h1 {
+  font-family: var(--font-display);
+  font-weight: var(--fw-bold);
+  font-size: var(--fs-2xl);
+  line-height: var(--lh-tight);
+  letter-spacing: var(--tr-tight);
+  color: var(--color-text);
+}
+
+/* H2 — section */
+.md-h2 {
+  font-family: var(--font-sans);
+  font-weight: var(--fw-bold);
+  font-size: var(--fs-xl);
+  line-height: var(--lh-snug);
+  color: var(--color-text);
+}
+
+/* H3 — subsection */
+.md-h3 {
+  font-family: var(--font-sans);
+  font-weight: var(--fw-semibold);
+  font-size: var(--fs-lg);
+  line-height: var(--lh-snug);
+  color: var(--color-text);
+}
+
+/* Body */
+.md-body {
+  font-family: var(--font-sans);
+  font-weight: var(--fw-regular);
+  font-size: var(--fs-md);
+  line-height: var(--lh-normal);
+  color: var(--color-text);
+}
+
+/* Small / helper */
+.md-small {
+  font-family: var(--font-sans);
+  font-weight: var(--fw-regular);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-normal);
+  color: var(--color-text-muted);
+}
+
+/* Caption / overline */
+.md-overline {
+  font-family: var(--font-sans);
+  font-weight: var(--fw-bold);
+  font-size: 10px;
+  line-height: 1;
+  letter-spacing: var(--tr-overline);
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+/* Label — table headers, form labels */
+.md-label {
+  font-family: var(--font-sans);
+  font-weight: var(--fw-bold);
+  font-size: 10px;
+  line-height: 1;
+  letter-spacing: var(--tr-caps);
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+/* Mono — numeric / time / code */
+.md-mono {
+  font-family: var(--font-mono);
+  font-weight: var(--fw-medium);
+  font-size: var(--fs-base);
+  line-height: var(--lh-normal);
+  font-feature-settings: "tnum";
+  color: var(--color-text);
+}
+
+.md-mono-lg {
+  font-family: var(--font-mono);
+  font-weight: var(--fw-bold);
+  font-size: var(--fs-xl);
+  line-height: var(--lh-snug);
+  font-feature-settings: "tnum";
+  color: var(--color-text);
+}
+
+/* Badge / pill text */
+.md-pill {
+  font-family: var(--font-sans);
+  font-weight: var(--fw-bold);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}

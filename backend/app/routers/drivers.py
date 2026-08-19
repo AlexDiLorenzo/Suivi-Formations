@@ -1,5 +1,13 @@
+"""Consultation des depanneurs et reglage de ce qu'on exige d'eux.
+
+La liste elle-meme n'est pas modifiable ici : elle est le reflet de l'equipe du
+depannage tenue dans DepanTime (cf. app/sync_depantime.py). Ni creation, ni
+archivage, ni modification de l'identite — tout cela serait ecrase a la
+synchronisation suivante et ferait diverger les deux outils. Ne restent
+modifiables que le profil de permis et l'applicabilite des documents, qui
+n'existent que dans cette application.
+"""
 from collections import defaultdict
-from datetime import date
 from typing import Annotated
 from uuid import UUID
 
@@ -8,13 +16,14 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.deps import get_current_admin
-from app.models import DocumentType, Driver, DriverRequiredDocument, DriverStatus
-from app.schemas import (
-    DriverCreate,
-    DriverOut,
-    DriverUpdate,
-    RequirementsSync,
+from app.models import (
+    DocumentType,
+    Driver,
+    DriverProfil,
+    DriverRequiredDocument,
+    DriverStatus,
 )
+from app.schemas import DriverOut, DriverUpdate, RequirementsSync
 
 
 router = APIRouter(dependencies=[Depends(get_current_admin)])
@@ -66,15 +75,6 @@ def list_drivers(
     return [_serialize(d, grouped.get(d.id, [])) for d in drivers]
 
 
-@router.post("", response_model=DriverOut, status_code=status.HTTP_201_CREATED)
-def create_driver(payload: DriverCreate, db: Annotated[Session, Depends(get_db)]):
-    driver = Driver(**payload.model_dump(exclude_unset=True))
-    db.add(driver)
-    db.commit()
-    db.refresh(driver)
-    return _serialize(driver, [])
-
-
 @router.get("/{driver_id}", response_model=DriverOut)
 def get_driver(driver_id: UUID, db: Annotated[Session, Depends(get_db)]):
     driver = db.get(Driver, driver_id)
@@ -86,25 +86,18 @@ def get_driver(driver_id: UUID, db: Annotated[Session, Depends(get_db)]):
 
 @router.patch("/{driver_id}", response_model=DriverOut)
 def update_driver(driver_id: UUID, payload: DriverUpdate, db: Annotated[Session, Depends(get_db)]):
+    """Modifie le profil de permis, et rien d'autre (cf. DriverUpdate)."""
     driver = db.get(Driver, driver_id)
     if not driver:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Depanneur introuvable")
-    for k, v in payload.model_dump(exclude_unset=True).items():
+    donnees = payload.model_dump(exclude_unset=True)
+    profil = donnees.get("profil")
+    if profil is not None and profil not in {p.value for p in DriverProfil}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Profil inconnu"
+        )
+    for k, v in donnees.items():
         setattr(driver, k, v)
-    db.commit()
-    db.refresh(driver)
-    grouped = _load_requirements(db, [driver.id])
-    return _serialize(driver, grouped.get(driver.id, []))
-
-
-@router.post("/{driver_id}/archive", response_model=DriverOut)
-def archive_driver(driver_id: UUID, db: Annotated[Session, Depends(get_db)]):
-    driver = db.get(Driver, driver_id)
-    if not driver:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Depanneur introuvable")
-    driver.statut = DriverStatus.ARCHIVED.value
-    if not driver.date_sortie:
-        driver.date_sortie = date.today()
     db.commit()
     db.refresh(driver)
     grouped = _load_requirements(db, [driver.id])

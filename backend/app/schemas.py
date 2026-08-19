@@ -34,25 +34,16 @@ class TotpEnableRequest(BaseModel):
     totp_code: str = Field(min_length=6, max_length=10)
 
 
-class DriverCreate(BaseModel):
-    # Au depannage, beaucoup de fiches ne portent qu'un patronyme.
-    prenom: str | None = None
-    nom: str
-    email: EmailStr | None = None
-    telephone: str | None = None
-    date_entree: date | None = None
-    external_id_depantime: str | None = None
-    profil: str | None = None
-
-
 class DriverUpdate(BaseModel):
-    prenom: str | None = None
-    nom: str | None = None
-    email: EmailStr | None = None
-    telephone: str | None = None
-    date_entree: date | None = None
-    date_sortie: date | None = None
-    external_id_depantime: str | None = None
+    """Seul champ modifiable ici : le profil de permis.
+
+    L'identite (nom, prenom, email, dates) et le statut actif/archive
+    appartiennent a DepanTime et sont reecrits a chaque synchronisation ; les
+    modifier ici ne tiendrait pas une heure. Le profil, lui, ne decrit pas la
+    personne mais ce qu'on exige d'elle : il n'existe que dans cette
+    application.
+    """
+
     profil: str | None = None
 
 
@@ -279,7 +270,9 @@ class SyncResultOut(BaseModel):
     mis_a_jour: int
     archives: int
     reactives: int
+    supprimes: int = 0
     ignores: list[str] = Field(default_factory=list)
+    hors_depantime: list[str] = Field(default_factory=list)
 
 
 class DocusignSendRequest(BaseModel):

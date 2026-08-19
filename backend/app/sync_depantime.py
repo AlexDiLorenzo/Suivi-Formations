@@ -10,8 +10,12 @@ date d'entree, statut actif/archive.
 Ce qui appartient a HABILITATION (jamais touche par la synchro) : le profil de
 permis, l'applicabilite des documents, et bien sur les documents eux-memes.
 
-Rien n'est supprime : un depanneur retire de DepanTime est archive ici, pour
-que ses pieces restent consultables (retention post-depart).
+L'alignement est strict : une fiche absente de DepanTime n'a rien a faire dans
+la liste, meme si elle a ete creee ici avant que la synchro existe. Deux sorts,
+selon ce qu'elle porte :
+  - elle detient des documents  -> archivee, jamais supprimee (les pieces de
+    conformite doivent rester consultables apres le depart) ;
+  - elle n'en detient aucun     -> supprimee, il n'y a rien a conserver.
 """
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
@@ -20,7 +24,13 @@ import httpx
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
-from app.models import DocumentType, Driver, DriverRequiredDocument, DriverStatus
+from app.models import (
+    Document,
+    DocumentType,
+    Driver,
+    DriverRequiredDocument,
+    DriverStatus,
+)
 from app.profils import DOCUMENTS_PAR_DEFAUT
 
 
@@ -34,7 +44,9 @@ class SyncResult:
     mis_a_jour: int = 0
     archives: int = 0
     reactives: int = 0
+    supprimes: int = 0
     ignores: list[str] = field(default_factory=list)
+    hors_depantime: list[str] = field(default_factory=list)
 
     @property
     def total_traites(self) -> int:
@@ -179,22 +191,31 @@ def synchroniser(db: Session) -> SyncResult:
         else:
             resultat.mis_a_jour += 1
 
-    # Disparu de DepanTime (fiche supprimee et non archivee) : on archive plutot
-    # que de supprimer, les pieces deja deposees doivent rester consultables.
-    orphelins = (
-        db.query(Driver)
-        .filter(Driver.external_id_depantime.isnot(None))
-        .filter(Driver.statut == DriverStatus.ACTIVE.value)
-        .all()
-    )
-    for driver in orphelins:
-        if driver.external_id_depantime in vus:
+    # Tout ce qui n'est pas dans DepanTime : fiches disparues de la-bas, et
+    # fiches creees ici a la main avant que la synchro existe (cle nulle).
+    for driver in db.query(Driver).all():
+        if driver.external_id_depantime and driver.external_id_depantime in vus:
             continue
-        driver.statut = DriverStatus.ARCHIVED.value
-        if not driver.date_sortie:
-            driver.date_sortie = date.today()
-        driver.last_sync_at = now
-        resultat.archives += 1
+
+        nom = f"{driver.nom} {driver.prenom or ''}".strip()
+        possede_des_pieces = (
+            db.query(Document).filter(Document.driver_id == driver.id).count() > 0
+        )
+        if possede_des_pieces:
+            if driver.statut == DriverStatus.ACTIVE.value:
+                driver.statut = DriverStatus.ARCHIVED.value
+                if not driver.date_sortie:
+                    driver.date_sortie = date.today()
+                driver.last_sync_at = now
+                resultat.archives += 1
+                resultat.hors_depantime.append(f"{nom} : archive (documents conserves)")
+            continue
+
+        # Aucune piece : la fiche ne porte rien, on l'efface pour que la liste
+        # reste le reflet exact de DepanTime.
+        db.delete(driver)
+        resultat.supprimes += 1
+        resultat.hors_depantime.append(f"{nom} : supprime (aucun document)")
 
     db.commit()
     return resultat

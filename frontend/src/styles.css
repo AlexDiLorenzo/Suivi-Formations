@@ -1235,3 +1235,27 @@ input[type="file"]::file-selector-button:hover {
     justify-self: start;
   }
 }
+
+/* Identité reprise de DepanTime, affichée en lecture seule */
+.fiche-identite {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  margin: 0 0 18px;
+  padding: 10px 14px;
+  background: #F4F3EE;
+  border-radius: 6px;
+}
+
+.fiche-identite dt {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--c-text-muted);
+}
+
+.fiche-identite dd {
+  margin: 2px 0 0;
+  font-size: 14px;
+}

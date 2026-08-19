@@ -121,12 +121,14 @@ export const api = {
     status: () => request('/sync/depantime'),
     run: () => request('/sync/depantime', { method: 'POST' }),
   },
+  // La liste des depanneurs est le reflet de DepanTime : pas de creation, pas
+  // d'archivage, pas de retouche d'identite. Seuls le profil de permis et
+  // l'applicabilite des documents se reglent ici.
   drivers: {
     list: ({ includeArchived = false } = {}) =>
       request(`/drivers?include_archived=${includeArchived}`),
-    create: (payload) => request('/drivers', { method: 'POST', body: payload }),
+    get: (id) => request(`/drivers/${id}`),
     update: (id, payload) => request(`/drivers/${id}`, { method: 'PATCH', body: payload }),
-    archive: (id) => request(`/drivers/${id}/archive`, { method: 'POST' }),
     syncRequirements: (id, documentTypeIds) =>
       request(`/drivers/${id}/requirements`, {
         method: 'PUT',

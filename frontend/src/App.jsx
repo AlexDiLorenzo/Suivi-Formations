@@ -632,7 +632,10 @@ function DriverSheetView({ driverId, docTypes, data, onRetour, rafraichir, onMod
           <span className={`score-badge ${scoreClass(driver.score)}`}>
             {driver.score != null ? `${driver.score}%` : '—'}
           </span>
-          <button className="btn btn-ghost" onClick={() => onModifier(driver)}>Modifier la fiche</button>
+          <button className="btn btn-ghost" onClick={() => onModifier(driver)}
+            title="Régler le profil de permis et les documents attendus">
+            Profil &amp; documents attendus
+          </button>
           <button className="btn btn-ghost" onClick={exporterFiche} disabled={exportEnCours}
             title="Archive ZIP des documents à jour, nommés proprement">
             {exportEnCours ? 'Préparation…' : '⬇ Dossier ZIP'}
@@ -1079,160 +1082,143 @@ function UploadModal({
 // Drivers
 // =====================================================================
 
-const EMPTY_FORM = {
-  prenom: '',
-  nom: '',
-  email: '',
-  telephone: '',
-  date_entree: '',
-  external_id_depantime: '',
-  profil: '',
-}
-
-function DriverFormModal({ driver, docTypes, profils, onClose, onSaved }) {
-  const isEdit = Boolean(driver)
-  const [form, setForm] = useState(() => {
-    if (!driver) return { ...EMPTY_FORM }
-    return {
-      prenom: driver.prenom || '',
-      nom: driver.nom || '',
-      email: driver.email || '',
-      telephone: driver.telephone || '',
-      date_entree: driver.date_entree || '',
-      external_id_depantime: driver.external_id_depantime || '',
-      profil: driver.profil || '',
-    }
-  })
-  const [applicableIds, setApplicableIds] = useState(
-    () => new Set(driver?.required_document_type_ids || [])
-  )
+/* La liste des dépanneurs vient de DepanTime et n'est pas modifiable ici : ni
+   création, ni archivage, ni retouche de l'identité — la synchronisation les
+   écraserait. Cette modale ne règle que ce qui appartient à l'application :
+   le profil de permis et les documents attendus de la personne. */
+function DriverProfilModal({ driver, docTypes, profils, onClose, onSaved }) {
+  // La fiche complete est relue ici : selon l'ecran appelant, l'objet recu vient
+  // du tableau de bord et ne porte pas les applicabilites. S'en remettre a lui
+  // reviendrait a enregistrer une liste vide, donc a tout decocher.
+  const [complet, setComplet] = useState(null)
+  const [profil, setProfil] = useState(driver.profil || '')
+  const [applicableIds, setApplicableIds] = useState(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
-  function update(field, value) {
-    setForm((f) => ({ ...f, [field]: value }))
-  }
+  useEffect(() => {
+    api.drivers
+      .get(driver.id)
+      .then((d) => {
+        setComplet(d)
+        setProfil(d.profil || '')
+        setApplicableIds(new Set(d.required_document_type_ids || []))
+      })
+      .catch((e) => setError(e.detail || String(e)))
+  }, [driver.id])
 
-  function toggleApplicable(id) {
-    setApplicableIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
+  const profilsParValeur = Object.fromEntries(profils.map((p) => [p.value, p]))
+  const docTypeParCode = Object.fromEntries(docTypes.map((dt) => [dt.code, dt]))
+
+  function handleProfilChange(valeur) {
+    setProfil(valeur)
+    // Choisir un profil pré-coche les documents attendus, sans jamais décocher
+    // ce qui a déjà été ajusté à la main.
+    const codes = profilsParValeur[valeur]?.document_codes || []
+    if (!codes.length) return
+    setApplicableIds((prec) => {
+      const suivant = new Set(prec || [])
+      for (const code of codes) {
+        const dt = docTypeParCode[code]
+        if (dt) suivant.add(dt.id)
+      }
+      return suivant
     })
   }
 
-  function handleProfilChange(value) {
-    update('profil', value)
-    const profil = profils.find((p) => p.value === value)
-    if (!profil) return
-    const codes = new Set(profil.document_codes)
-    setApplicableIds(new Set(docTypes.filter((dt) => codes.has(dt.code)).map((dt) => dt.id)))
+  function toggleApplicable(id) {
+    setApplicableIds((prec) => {
+      const suivant = new Set(prec || [])
+      if (suivant.has(id)) suivant.delete(id)
+      else suivant.add(id)
+      return suivant
+    })
   }
 
   async function handleSubmit(e) {
     e.preventDefault()
+    if (!applicableIds) return          // fiche pas encore chargee
     setError('')
     setSaving(true)
     try {
-      const payload = {
-        prenom: form.prenom,
-        nom: form.nom,
-        email: form.email || null,
-        telephone: form.telephone || null,
-        date_entree: form.date_entree || null,
-        external_id_depantime: form.external_id_depantime || null,
-        profil: form.profil || null,
+      if ((complet?.profil || '') !== profil) {
+        await api.drivers.update(driver.id, { profil: profil || null })
       }
-      let saved
-      if (isEdit) {
-        saved = await api.drivers.update(driver.id, payload)
-      } else {
-        saved = await api.drivers.create(payload)
-      }
-      await api.drivers.syncRequirements(saved.id, Array.from(applicableIds))
+      await api.drivers.syncRequirements(driver.id, Array.from(applicableIds))
       onSaved()
     } catch (err) {
-      setError(err.detail || 'Erreur lors de la sauvegarde')
+      setError(err.detail || 'Erreur lors de l\'enregistrement')
       setSaving(false)
     }
   }
 
-  const groupedDocTypes = CATEGORIE_ORDER
-    .map((cat) => ({ cat, items: docTypes.filter((dt) => (dt.categorie || CATEGORIE_DEFAUT) === cat) }))
-    .filter((g) => g.items.length > 0)
+  const groupes = NIVEAU_ORDER.map((niveau) => ({
+    niveau,
+    items: docTypes
+      .filter((dt) => dt.niveau_exigence === niveau)
+      .sort((a, b) => a.display_order - b.display_order),
+  })).filter((g) => g.items.length > 0)
 
   return (
     <div className="modal-overlay" onClick={onClose}>
       <form className="modal-card" onClick={(e) => e.stopPropagation()} onSubmit={handleSubmit}>
         <header className="modal-header">
-          <h2>{isEdit ? 'Editer le depanneur' : 'Nouveau depanneur'}</h2>
+          <h2>{driver.nom} {driver.prenom || ''}</h2>
           <button type="button" className="icon-btn" onClick={onClose} aria-label="Fermer">×</button>
         </header>
 
         <div className="modal-body">
-          <div className="grid-2">
-            <div className="field">
-              <label>Prenom *</label>
-              <input value={form.prenom} onChange={(e) => update('prenom', e.target.value)} required />
-            </div>
-            <div className="field">
-              <label>Nom *</label>
-              <input value={form.nom} onChange={(e) => update('nom', e.target.value)} required />
-            </div>
-            <div className="field">
-              <label>Email</label>
-              <input type="email" value={form.email} onChange={(e) => update('email', e.target.value)} />
-            </div>
-            <div className="field">
-              <label>Telephone</label>
-              <input value={form.telephone} onChange={(e) => update('telephone', e.target.value)} />
-            </div>
-            <div className="field">
-              <label>Date d'entree</label>
-              <input
-                type="date"
-                value={form.date_entree}
-                onChange={(e) => update('date_entree', e.target.value)}
-              />
-            </div>
-            <div className="field">
-              <label>ID DepanTime (optionnel)</label>
-              <input
-                value={form.external_id_depantime}
-                onChange={(e) => update('external_id_depantime', e.target.value)}
-              />
-            </div>
+          <div className="bandeau-info">
+            L'identité et le statut de ce dépanneur viennent de <strong>DepanTime</strong> et
+            ne se modifient que là-bas. Ici, on règle ce qu'on exige de lui.
           </div>
 
+          <dl className="fiche-identite">
+            <div><dt>Email</dt><dd>{complet?.email || driver.email || '—'}</dd></div>
+            <div><dt>Entrée</dt><dd>{formatDateFr(complet?.date_entree) || '—'}</dd></div>
+            <div><dt>Statut</dt><dd>{driver.statut === 'archived' ? 'Archivé' : 'Actif'}</dd></div>
+          </dl>
+
+          {!applicableIds && !error && <p className="hint">Chargement de la fiche…</p>}
+
           <div className="section">
-            <h3>Profil &amp; documents applicables</h3>
+            <h3>Profil de permis</h3>
             <div className="field">
-              <label>Profil de permis</label>
-              <select value={form.profil} onChange={(e) => handleProfilChange(e.target.value)}>
-                <option value="">— Non defini —</option>
+              <select value={profil} onChange={(e) => handleProfilChange(e.target.value)}>
+                <option value="">— Non défini —</option>
                 {profils.map((p) => (
                   <option key={p.value} value={p.value}>{p.label}</option>
                 ))}
               </select>
             </div>
             <p className="hint">
-              Choisir un profil pre-coche les documents attendus pour ce type de permis.
-              Tu peux ensuite ajuster manuellement — les non-coches s'affichent en gris
-              dans le tableau de bord.
+              Choisir un profil pré-coche les documents attendus pour ce type de permis.
+              L'ajustement reste possible case par case ci-dessous.
             </p>
-            {groupedDocTypes.map(({ cat, items }) => (
-              <div key={cat} className="check-group">
-                <h4>{CATEGORIE_LABEL[cat] || cat}</h4>
+          </div>
+
+          <div className="section">
+            <h3>Documents attendus de cette personne</h3>
+            <p className="hint">
+              Les documents non cochés ne lui sont pas applicables : ils n'apparaissent
+              pas sur sa fiche et ne comptent pas dans son score.
+            </p>
+            {groupes.map(({ niveau, items }) => (
+              <div key={niveau} className="check-group">
+                <h4>{NIVEAU_LABEL[niveau]}</h4>
                 <div className="checks">
                   {items.map((dt) => (
                     <label key={dt.id} className="check">
                       <input
                         type="checkbox"
-                        checked={applicableIds.has(dt.id)}
+                        disabled={!applicableIds}
+                        checked={applicableIds ? applicableIds.has(dt.id) : false}
                         onChange={() => toggleApplicable(dt.id)}
                       />
-                      <span>{dt.libelle}</span>
+                      <span>
+                        {dt.libelle}
+                        <span className="doc-categorie">{CATEGORIE_LABEL[dt.categorie] || ''}</span>
+                      </span>
                     </label>
                   ))}
                 </div>
@@ -1245,8 +1231,8 @@ function DriverFormModal({ driver, docTypes, profils, onClose, onSaved }) {
 
         <footer className="modal-footer">
           <button type="button" className="btn btn-ghost" onClick={onClose}>Annuler</button>
-          <button type="submit" className="btn" disabled={saving}>
-            {saving ? 'Enregistrement…' : isEdit ? 'Enregistrer' : 'Creer'}
+          <button type="submit" className="btn" disabled={saving || !applicableIds}>
+            {saving ? 'Enregistrement…' : 'Enregistrer'}
           </button>
         </footer>
       </form>
@@ -1270,17 +1256,6 @@ function DriversView({ docTypes, profils, syncStatut, onApresModification }) {
 
   useEffect(reload, [includeArchived])
 
-  async function handleArchive(driver) {
-    if (!confirm(`Archiver ${nomComplet(driver)} ?`)) return
-    try {
-      await api.drivers.archive(driver.id)
-      reload()
-      onApresModification?.()
-    } catch (err) {
-      alert(err.detail || 'Erreur lors de l\'archivage')
-    }
-  }
-
   const docTypeById = Object.fromEntries(docTypes.map((dt) => [dt.id, dt]))
   const synchronise = syncStatut?.active
 
@@ -1295,16 +1270,13 @@ function DriversView({ docTypes, profils, syncStatut, onApresModification }) {
         </div>
       </div>
 
-      {synchronise && (
-        <div className="bandeau-info">
-          La liste est alimentée par <strong>DepanTime</strong> : un dépanneur ajouté ou archivé
-          là-bas l'est aussi ici. Une fiche créée à la main reste possible, mais elle ne sera pas
-          suivie par la synchronisation.
-        </div>
-      )}
+      <div className="bandeau-info">
+        La liste est le reflet de l'équipe du dépannage tenue dans <strong>DepanTime</strong> :
+        ajouter, renommer ou archiver un dépanneur se fait là-bas, et rien d'autre.
+        Ici on règle seulement ce qu'on exige de chacun, et on dépose ses documents.
+      </div>
 
       <div className="toolbar">
-        <button className="btn" onClick={() => setEditing('new')}>+ Nouveau dépanneur</button>
         <label className="check inline">
           <input
             type="checkbox"
@@ -1320,10 +1292,7 @@ function DriversView({ docTypes, profils, syncStatut, onApresModification }) {
 
       {drivers && drivers.length === 0 && (
         <div className="empty">
-          Aucun dépanneur.{' '}
-          {synchronise
-            ? 'Lance la synchronisation depuis l\'onglet Dépanneurs.'
-            : 'Clique sur « + Nouveau » pour commencer.'}
+          Aucun dépanneur. Lance la synchronisation depuis l'onglet Dépanneurs.
         </div>
       )}
 
@@ -1374,13 +1343,8 @@ function DriversView({ docTypes, profils, syncStatut, onApresModification }) {
                   </td>
                   <td className="actions">
                     <button className="btn btn-ghost btn-sm" onClick={() => setEditing(d)}>
-                      Éditer
+                      Profil &amp; documents
                     </button>
-                    {d.statut !== 'archived' && (
-                      <button className="btn btn-ghost btn-sm danger" onClick={() => handleArchive(d)}>
-                        Archiver
-                      </button>
-                    )}
                   </td>
                 </tr>
               ))}
@@ -1390,14 +1354,15 @@ function DriversView({ docTypes, profils, syncStatut, onApresModification }) {
       )}
 
       {editing && (
-        <DriverFormModal
-          driver={editing === 'new' ? null : editing}
+        <DriverProfilModal
+          driver={editing}
           docTypes={docTypes}
           profils={profils}
           onClose={() => setEditing(null)}
           onSaved={() => {
             setEditing(null)
             reload()
+            onApresModification?.()
           }}
         />
       )}
@@ -1692,7 +1657,7 @@ function AdminApp() {
       </main>
 
       {editDriver && (
-        <DriverFormModal
+        <DriverProfilModal
           driver={editDriver}
           docTypes={docTypes}
           profils={profils}

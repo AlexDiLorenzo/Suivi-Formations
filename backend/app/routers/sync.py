@@ -30,7 +30,9 @@ def executer(db: Session) -> SyncResultOut:
         mis_a_jour=resultat.mis_a_jour,
         archives=resultat.archives,
         reactives=resultat.reactives,
+        supprimes=resultat.supprimes,
         ignores=resultat.ignores,
+        hors_depantime=resultat.hors_depantime,
     )
 
 

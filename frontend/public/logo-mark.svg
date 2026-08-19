@@ -1,6 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" role="img" aria-label="Montpellier Dépannage — mark">
-  <ellipse cx="40" cy="40" rx="38" ry="38" fill="#2C6126"></ellipse>
-  <ellipse cx="40" cy="40" rx="35" ry="35" fill="none" stroke="#1A190F" stroke-width="1.5"></ellipse>
-  <text x="40" y="38" font-family="&#39;Space Mono&#39;, monospace" font-size="16" font-weight="700" fill="#E4E13C" text-anchor="middle">MD</text>
-  <text x="40" y="56" font-family="&#39;Space Mono&#39;, monospace" font-size="7" font-weight="700" fill="#E4E13C" text-anchor="middle" letter-spacing="1">DÉPANNAGE</text>
-</svg>

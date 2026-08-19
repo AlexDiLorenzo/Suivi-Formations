@@ -199,6 +199,18 @@ def reminders_due(db: Annotated[Session, Depends(get_db)]):
     return DueRemindersResponse(items=items, skipped=skipped)
 
 
+@router.post("/sync/depantime")
+def sync_depantime(db: Annotated[Session, Depends(get_db)]):
+    """Synchro de l'equipe declenchee par le cron n8n.
+
+    Meme operation que le bouton de l'application ; c'est ce qui rend
+    l'alignement automatique plutot que dependant d'un clic.
+    """
+    from app.routers.sync import executer
+
+    return executer(db)
+
+
 @router.post("/reminders/mark-sent")
 def reminders_mark_sent(payload: MarkSentRequest, db: Annotated[Session, Depends(get_db)]):
     """Appele par n8n apres l'envoi des emails pour cocher sent_at."""

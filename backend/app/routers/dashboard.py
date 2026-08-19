@@ -10,8 +10,8 @@ from app.config import get_settings
 from app.db import get_db
 from app.deps import get_current_admin
 from app.models import (
+    POIDS_NIVEAU,
     Document,
-    DocumentCriticite,
     DocumentRequest,
     DocumentType,
     DocumentVersion,
@@ -175,7 +175,7 @@ def get_dashboard(db: Annotated[Session, Depends(get_db)]):
             )
             counter[status_value] += 1
 
-        # Score de conformite : poids critique x3 / standard x1.
+        # Score de conformite : poids obligatoire x3 / profil x2 / complementaire x1.
         # Conforme = cellule verte ou orange (doc valide) ; rouge = non conforme ;
         # grise (non applicable) exclue du calcul.
         applicable_weight = 0
@@ -183,7 +183,7 @@ def get_dashboard(db: Annotated[Session, Depends(get_db)]):
         for dt, cell in zip(doc_types, cells):
             if cell.status == CellStatus.GREY:
                 continue
-            weight = 3 if dt.criticite == DocumentCriticite.CRITIQUE.value else 1
+            weight = POIDS_NIVEAU.get(dt.niveau_exigence, 1)
             applicable_weight += weight
             if cell.status in (CellStatus.GREEN, CellStatus.ORANGE):
                 compliant_weight += weight
@@ -202,6 +202,7 @@ def get_dashboard(db: Annotated[Session, Depends(get_db)]):
                 nom=driver.nom,
                 statut=driver.statut,
                 email=driver.email,
+                profil=driver.profil,
                 cells=cells,
                 score=driver_score,
             )

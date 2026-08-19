@@ -5,15 +5,27 @@ le code n'est plus dans la liste sont supprimes — nettoyage des anciens types.
 Les applicabilites (driver_required_documents) d'un type obsolete sont purgees
 automatiquement (ce ne sont que de la config). En revanche la suppression echoue
 si des documents reels y sont encore rattaches (FK RESTRICT) : c'est voulu, on
-ne detruit pas des fichiers de conformite en silence.
+ne detruit pas des fichiers de conformite en silence — le type est alors laisse
+en place avec un avertissement.
+
+Deux axes portent l'affichage de la fiche depanneur :
+  - `categorie`       : la famille (qui detient le document)
+  - `niveau_exigence` : obligatoire / selon profil / complementaire
+
+Le niveau est modifiable dans l'application ; ce seed ne fait que poser un
+point de depart. Il n'ecrase donc PAS un niveau deja ajuste a la main
+(cf. --reset-niveaux pour forcer le retour aux valeurs d'origine).
 """
+import argparse
+
 from app.db import SessionLocal
 from app.models import (
     DocumentCategorie,
-    DocumentCriticite,
     DocumentModeAcquisition,
+    DocumentNiveauExigence,
     DocumentType,
     DriverRequiredDocument,
+    Document,
 )
 
 
@@ -21,7 +33,7 @@ AN = 365
 
 
 def _t(code, libelle, categorie, *, perimable, duree=None,
-       criticite=DocumentCriticite.STANDARD,
+       niveau=DocumentNiveauExigence.COMPLEMENTAIRE,
        mode=DocumentModeAcquisition.UPLOAD, ordre):
     return {
         "code": code,
@@ -29,60 +41,94 @@ def _t(code, libelle, categorie, *, perimable, duree=None,
         "categorie": categorie.value,
         "est_perimable": perimable,
         "duree_validite_jours_default": duree,
-        "criticite": criticite.value,
+        "niveau_exigence": niveau.value,
         "mode_acquisition": mode.value,
         "display_order": ordre,
     }
 
 
 _C = DocumentCategorie
-_CRIT = DocumentCriticite.CRITIQUE
-_DOCUSIGN = DocumentModeAcquisition.DOCUSIGN
+_OBLIG = DocumentNiveauExigence.OBLIGATOIRE
+_PROFIL = DocumentNiveauExigence.PROFIL
 
 SEEDS = [
-    _t("PERMIS", "Permis de conduire", _C.PERMIS_CONDUITE, perimable=True, duree=15 * AN, criticite=_CRIT, ordre=10),
-    _t("ATTESTATION_PERMIS", "Attestation sur l'honneur de validite du permis", _C.PERMIS_CONDUITE, perimable=True, duree=90, mode=_DOCUSIGN, ordre=20),
-    _t("FIMO_FCO", "FIMO / FCO", _C.PERMIS_CONDUITE, perimable=True, duree=5 * AN, criticite=_CRIT, ordre=30),
-    _t("B2XL", "B2XL", _C.PERMIS_CONDUITE, perimable=True, duree=3 * AN, criticite=_CRIT, ordre=40),
-    _t("B1VL", "B1VL", _C.PERMIS_CONDUITE, perimable=True, duree=5 * AN, criticite=_CRIT, ordre=50),
-    _t("CACES_GRUE", "CACES grue", _C.CACES_AUTORISATIONS, perimable=True, duree=5 * AN, criticite=_CRIT, ordre=60),
-    _t("CACES_CHARIOT", "CACES chariot elevateur", _C.CACES_AUTORISATIONS, perimable=True, duree=5 * AN, criticite=_CRIT, ordre=70),
-    _t("AUTORISATION_CONDUITE", "Autorisation de conduite (entreprise)", _C.CACES_AUTORISATIONS, perimable=True, duree=5 * AN, criticite=_CRIT, ordre=80),
-    _t("FORMATION_INITIALE", "Formation initiale (interne)", _C.FORMATIONS_INTERNES, perimable=False, ordre=90),
-    _t("VINCI_EMA", "VINCI EMA", _C.FORMATIONS_INTERNES, perimable=False, ordre=110),
-    _t("VINCI_AVA", "VINCI AVA", _C.FORMATIONS_INTERNES, perimable=False, ordre=120),
-    _t("DIPLOMES", "Diplomes & titres (CAP, BEP, Bac Pro, BTS)", _C.DIPLOMES, perimable=False, ordre=130),
-    _t("CNI", "Carte nationale d'identite", _C.ADMINISTRATIF, perimable=True, duree=15 * AN, ordre=140),
-    _t("JUSTIF_DOMICILE", "Justificatif de domicile", _C.ADMINISTRATIF, perimable=False, ordre=150),
-    _t("RIB", "RIB", _C.ADMINISTRATIF, perimable=False, ordre=160),
-    _t("CV", "CV", _C.ADMINISTRATIF, perimable=False, ordre=170),
-    _t("CONTRAT_TRAVAIL", "Contrat de travail", _C.ADMINISTRATIF, perimable=False, ordre=180),
-    _t("DPAE", "DPAE (declaration prealable a l'embauche)", _C.ADMINISTRATIF, perimable=False, ordre=190),
-    _t("MUTUELLE", "Mutuelle", _C.ADMINISTRATIF, perimable=False, ordre=200),
+    # ── Conduite & permis ────────────────────────────────────────────
+    _t("PERMIS", "Permis de conduire", _C.CONDUITE_PERMIS, perimable=True, duree=15 * AN, niveau=_OBLIG, ordre=10),
+    _t("FIMO_FCO", "FIMO / FCO", _C.CONDUITE_PERMIS, perimable=True, duree=5 * AN, niveau=_PROFIL, ordre=20),
+    _t("B2XL", "B2XL", _C.CONDUITE_PERMIS, perimable=True, duree=3 * AN, niveau=_PROFIL, ordre=30),
+    _t("B1VL", "B1VL", _C.CONDUITE_PERMIS, perimable=True, duree=5 * AN, niveau=_PROFIL, ordre=40),
+
+    # ── Habilitations & CACES ────────────────────────────────────────
+    _t("AUTORISATION_CONDUITE", "Autorisation de conduite (entreprise)", _C.HABILITATIONS_CACES, perimable=True, duree=5 * AN, niveau=_OBLIG, ordre=50),
+    _t("CACES_GRUE", "CACES grue", _C.HABILITATIONS_CACES, perimable=True, duree=5 * AN, niveau=_PROFIL, ordre=60),
+    _t("CACES_CHARIOT", "CACES chariot elevateur", _C.HABILITATIONS_CACES, perimable=True, duree=5 * AN, niveau=_PROFIL, ordre=70),
+
+    # ── Formations internes ──────────────────────────────────────────
+    _t("FORMATION_INITIALE", "Formation initiale (interne)", _C.FORMATIONS_INTERNES, perimable=False, niveau=_OBLIG, ordre=80),
+    _t("VINCI_EMA", "VINCI EMA", _C.FORMATIONS_INTERNES, perimable=False, ordre=90),
+    _t("VINCI_AVA", "VINCI AVA", _C.FORMATIONS_INTERNES, perimable=False, ordre=100),
+
+    # ── RH & administratif ───────────────────────────────────────────
+    _t("PIECE_IDENTITE", "Piece d'identite (CNI ou passeport)", _C.RH_ADMINISTRATIF, perimable=True, duree=15 * AN, niveau=_OBLIG, ordre=110),
+    _t("CONTRAT_TRAVAIL", "Contrat de travail", _C.RH_ADMINISTRATIF, perimable=False, niveau=_OBLIG, ordre=120),
+    _t("DPAE", "DPAE (declaration prealable a l'embauche)", _C.RH_ADMINISTRATIF, perimable=False, niveau=_OBLIG, ordre=130),
+    _t("JUSTIF_DOMICILE", "Justificatif de domicile", _C.RH_ADMINISTRATIF, perimable=False, ordre=140),
+    _t("RIB", "RIB", _C.RH_ADMINISTRATIF, perimable=False, ordre=150),
+    _t("MUTUELLE", "Mutuelle", _C.RH_ADMINISTRATIF, perimable=False, ordre=160),
+    _t("CV", "CV", _C.RH_ADMINISTRATIF, perimable=False, ordre=170),
+    _t("DIPLOMES", "Diplomes & titres (CAP, BEP, Bac Pro, BTS)", _C.RH_ADMINISTRATIF, perimable=False, ordre=180),
 ]
+
+# Champs poses a chaque passage. `niveau_exigence` en est volontairement absent :
+# il est reglable depuis l'application, un reseed ne doit pas defaire ce reglage.
+_CHAMPS_TOUJOURS = (
+    "libelle", "categorie", "est_perimable", "duree_validite_jours_default",
+    "mode_acquisition", "display_order",
+)
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--reset-niveaux",
+        action="store_true",
+        help="Reapplique aussi les niveaux d'exigence d'origine (ecrase les reglages faits dans l'app)",
+    )
+    args = parser.parse_args()
+
     db = SessionLocal()
     try:
         codes = {s["code"] for s in SEEDS}
         for seed in SEEDS:
             existing = db.query(DocumentType).filter(DocumentType.code == seed["code"]).first()
             if existing:
-                for key, value in seed.items():
-                    setattr(existing, key, value)
+                for key in _CHAMPS_TOUJOURS:
+                    setattr(existing, key, seed[key])
+                if args.reset_niveaux:
+                    existing.niveau_exigence = seed["niveau_exigence"]
                 print(f"~ {seed['code']} mis a jour")
             else:
                 db.add(DocumentType(**seed))
                 print(f"+ {seed['code']}")
+
         for obsolete in db.query(DocumentType).filter(~DocumentType.code.in_(codes)).all():
-            # Les applicabilites sont de la config : on les purge pour ne pas
-            # bloquer la suppression. Les documents reels gardent leur FK RESTRICT.
+            rattaches = (
+                db.query(Document)
+                .filter(Document.document_type_id == obsolete.id)
+                .count()
+            )
+            if rattaches:
+                print(
+                    f"! {obsolete.code} conserve : {rattaches} document(s) reel(s) y sont "
+                    "rattaches. Supprime-les d'abord si le type doit vraiment disparaitre."
+                )
+                continue
             db.query(DriverRequiredDocument).filter(
                 DriverRequiredDocument.document_type_id == obsolete.id
             ).delete(synchronize_session=False)
             db.delete(obsolete)
             print(f"- {obsolete.code} supprime (obsolete, applicabilites purgees)")
+
         db.commit()
         print(f"\n{len(SEEDS)} types en place.")
     finally:

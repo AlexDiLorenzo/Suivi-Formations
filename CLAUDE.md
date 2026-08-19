@@ -13,21 +13,36 @@ Module 1MDP de suivi des habilitations et documents des dépanneurs (permis, FCO
 
 ## Périmètre fonctionnel
 
-- **~20 types de documents** en 5 catégories (permis & conduite, CACES & autorisations, formations internes, diplômes, administratif RH). Au cadrage il n'y en avait que 4 — étendu à l'étape 10. Chaque `DocumentType` porte `categorie`, `est_perimable`, `criticite` (critique/standard), `mode_acquisition` (upload/docusign). Seed dans `scripts/seed_doctypes.py`.
-- Tableau de bord matriciel dépanneurs × types, code couleur :
+- **18 types de documents** rangés sur **deux axes** (étape 12) :
+  - `categorie` = la **famille**, qui dit qui détient le document : `conduite_permis`, `habilitations_caces`, `formations_internes` (les trois relèvent de l'exploitation) et `rh_administratif` (le RH — les diplômes y ont été rapatriés).
+  - `niveau_exigence` = ce qu'on en attend : `obligatoire` (socle de tout dépanneur) / `profil` (selon le permis et les engins) / `complementaire`. Il **remplace** l'ancien `criticite` et porte à la fois le poids du score (3 / 2 / 1) et l'ordre d'affichage de la fiche.
+  - Le niveau est **réglable depuis l'application** (`PATCH /api/document-types/{id}`, bouton « ⚙ Niveaux » de la fiche) : la liste des documents exigés n'était pas arrêtée au moment de la refonte. `seed_doctypes.py` ne repose donc **pas** le niveau d'un type existant, sauf `--reset-niveaux`.
+  - Chaque `DocumentType` porte aussi `est_perimable` et `mode_acquisition` (upload/docusign). Seed dans `scripts/seed_doctypes.py`.
+- **Pièce d'identité** (`PIECE_IDENTITE`) : CNI **ou** passeport — c'est un justificatif d'identité qui est demandé, pas une pièce précise. Renommage en place de l'ancien `CNI` (migration 0004), pour ne pas détacher les documents déjà déposés.
+- **Écran d'accueil = la liste des dépanneurs** (étape 12) : une ligne par dépanneur avec son score, ses manques sur le socle, ses manquants / périmés / expirations sous 90 j. La matrice dépanneurs × 20 types a été retirée : illisible passé quelques dizaines de lignes.
+- **Fiche dépanneur** = la surface de travail. Documents groupés par `niveau_exigence` (socle et « selon profil » dépliés, complémentaire replié) puis par famille à l'intérieur. Par ligne : état, date de péremption, `J-xx`, **aperçu dans l'application** (blob → `<iframe>`, le JWT interdit un `<iframe src>` direct), dépôt d'une nouvelle version, **glisser-déposer** d'un PDF sur la ligne. Les cellules grises (non applicables) ne sont pas affichées : il n'y a rien à y déposer.
+- **Export ZIP** (`GET /api/documents/export`) : le dossier d'un dépanneur, ou toute la flotte avec un dossier par dépanneur. Seules les **versions courantes validées** y figurent — c'est le dossier « à jour » qu'on remet, pas l'historique. Noms de fichiers via `_download_filename` (`CODE_NOM_PRENOM_JJ.MM.AAAA.pdf`). `zipfile` de la stdlib, `ZIP_STORED` (les PDF sont déjà compressés).
+- **Demandes par magic link retirées de l'interface** (2026-08-19). Le backend (`document_requests.py`, `PublicUploadView`) reste en place et fonctionnel ; la relance repassera plus tard par un **mail automatique des documents manquants**, à cadrer.
+- Le code couleur historique de la matrice reste la base du calcul :
   - **Vert** : doc validé, > 90j de validité restante
   - **Orange** : doc validé, ≤ 90j de validité restante
   - **Rouge** : doc périmé OU applicable et jamais transmis
   - **Gris** : non applicable pour ce dépanneur
   - Documents **non-périmables** (RIB, CV, diplômes…) : pas de date → vert si validé, rouge si applicable et absent (jamais orange)
 - Applicabilité par dépanneur via `driver_required_documents`. Le champ `profil` du dépanneur (permis B / permis C-CE) pré-coche les documents par défaut via `app/profils.py` ; l'admin ajuste ensuite case par case.
-- **Scoring** (étape 10c/10d) : score de conformité par dépanneur (0-100 %), pondéré critique (×3) / standard (×1), + taux global. Conforme = cellule **verte ou orange** (le doc est valide) ; rouge = non conforme ; gris exclu du calcul. Affiché dans une colonne « Score » du dashboard + pastille « Conformité globale ».
+- **Scoring** (étape 10c/10d) : score de conformité par dépanneur (0-100 %), pondéré `obligatoire` ×3 / `profil` ×2 / `complementaire` ×1 (`POIDS_NIVEAU` dans `models.py`), + taux global. Conforme = cellule **verte ou orange** (le doc est valide) ; rouge = non conforme ; gris exclu du calcul.
 - **Saisie des dates manuelle** (pas d'OCR — décision explicite, à reprendre plus tard)
 - Workflow validation : `pending` → `validated` / `rejected` par l'admin
 - Versions archivées, **jamais d'écrasement** (impératif compliance URSSAF / Inspection du travail)
 - Dépanneur : **magic link à usage unique par demande**, pas de compte permanent. ⏸️ Flux conservé mais dormant (décision étape 10) — tout est admin-uploadé.
-- **Attestation sur l'honneur** (`ATTESTATION_PERMIS`, `mode_acquisition=docusign`) : signée via DocuSign (étape 10e). L'admin envoie l'enveloppe depuis le template `6da048a0-…` (rôle `Salarie`, l'admin choisit mois/année, défaut = mois courant) ; le dépanneur signe par email ; un clic sur « Rafraîchir le statut » importe le PDF signé comme `DocumentVersion` validée (`uploaded_by=docusign`). Auth JWT Grant, voir `app/docusign.py`.
-- App séparée de DepanTime ; import des dépanneurs via `scripts/import_drivers_from_depantime.py` (import manuel à la demande depuis un CSV, pas de sync continu).
+- ~~**Attestation sur l'honneur** (`ATTESTATION_PERMIS`)~~ : **abandonnée** (étape 12). Le type est supprimé par la migration 0004 — mais **seulement** si aucun document ni enveloppe n'y est rattaché, la FK `RESTRICT` protégeant les pièces de conformité. La machinerie DocuSign (`app/docusign.py`, `DocusignSection`) reste en place et branchée sur `mode_acquisition=docusign` : plus aucun type ne l'utilise, elle resservira au règlement intérieur (étape 11).
+- **Liste des dépanneurs synchronisée depuis DepanTime** (étape 12). DepanTime tient les fiches de l'équipe, cette application n'en est qu'un consommateur — rien n'est jamais renvoyé vers DepanTime.
+  - Source : `GET /api/habilitation-public/depanneurs` côté DepanTime (site `mtp` = le pôle Dépannage), auth par secret partagé `HABILITATION_SECRET` / `DEPANTIME_SECRET`, sur le modèle de `pilotage-public`.
+  - Déclenchement : bouton « ⟳ Synchroniser DepanTime » (`POST /api/sync/depantime`) **et** cron n8n (`POST /api/internal/sync/depantime`, header `X-Internal-Secret`).
+  - Ce que DepanTime possède et **écrase** à chaque passage : nom, prénom, email, date d'entrée, actif/archivé. Ce qui reste à HABILITATION : le profil de permis, l'applicabilité des documents, les documents eux-mêmes.
+  - **Rien n'est supprimé** : un dépanneur archivé ou disparu de DepanTime est archivé ici, ses pièces restent consultables (rétention post-départ).
+  - Un dépanneur créé par la synchro reçoit le **socle par défaut** (`profils.DOCUMENTS_PAR_DEFAUT`) : sans cela il s'afficherait 100 % conforme faute de document applicable.
+  - `scripts/import_drivers_from_depantime.py` (import CSV ponctuel) reste utilisable mais est **supplanté** par la synchro.
 - Rétention par défaut 5 ans post-départ (configurable)
 
 ## État actuel de la roadmap
@@ -44,7 +59,9 @@ Module 1MDP de suivi des habilitations et documents des dépanneurs (permis, FCO
 | 8 | RGPD : purge configurable post-départ, log d'accès | à faire |
 | 9 | Déploiement prod (sous-domaine, TLS, sauvegardes) | 🟡 backend en ligne sur https://formations.alex-worksmart.com (TLS OK), sauvegardes Postgres restant à mettre en place |
 | 10 | Évolution modèle documentaire (~20 types, profils, scoring, attestation DocuSign) | ✅ livré — 10a schéma (2026-05-15), 10b profil + applicabilité (2026-05-16), docs non-périmables (2026-05-18), 10c scoring + 10d affichage dashboard (2026-05-18), 10e intégration DocuSign (2026-05-18) |
-| 11 | Règlement intérieur : nouveau type (catégorie administratif, pré-coché pour tous via `_COMMUNS`), signé via DocuSign avec un **2ᵉ template**. Prérequis : faire porter le template ID par chaque `DocumentType` (le code n'en gère qu'un seul, `DOCUSIGN_TEMPLATE_ID`) au lieu d'un template global. | à faire |
+| 11 | Règlement intérieur : nouveau type (famille `rh_administratif`, pré-coché pour tous via `_COMMUNS`), signé via DocuSign avec un **2ᵉ template**. Prérequis : faire porter le template ID par chaque `DocumentType` (le code n'en gère qu'un seul, `DOCUSIGN_TEMPLATE_ID`) au lieu d'un template global. | à faire |
+| 12 | Lisibilité + synchro DepanTime : liste & fiche à la place de la matrice, 4 familles × 3 niveaux d'exigence, aperçu dans l'app, export ZIP, pièce d'identité générique, retrait de l'attestation sur l'honneur et des demandes par magic link | ✅ livré (2026-08-19) |
+| 13 | Mail automatique des documents manquants (remplace les demandes par magic link retirées à l'étape 12) | à cadrer |
 
 ## Conventions
 
@@ -68,6 +85,9 @@ Module 1MDP de suivi des habilitations et documents des dépanneurs (permis, FCO
 - **DocuSign désactivé par défaut** : si une des variables `DOCUSIGN_INTEGRATION_KEY/USER_ID/ACCOUNT_ID/PRIVATE_KEY` est vide, `settings.docusign_enabled` est `False` et les endpoints `/api/docusign/send` et `/refresh` renvoient `503`. La détection de signature est en **polling** (bouton « Rafraîchir »), pas de webhook Connect.
 - **Clé privée DocuSign** : `config.docusign_private_key_pem` lit en priorité le fichier `DOCUSIGN_PRIVATE_KEY_FILE` (défaut `/app/docusign-private.key`, monté par `docker-compose.prod.yml` depuis `/srv/habilitation/docusign-private.key` — méthode DepanTime) ; à défaut, la variable `DOCUSIGN_PRIVATE_KEY` (clé sur une ligne, `\n` littéraux reconvertis).
 - **Consentement DocuSign** : au premier appel, DocuSign peut exiger un consentement admin (`consent_required`). L'erreur remontée à l'admin contient l'URL à ouvrir une seule fois.
+- **`external_id_depantime` = `site:id`** (ex. `mtp:7`). Chez DepanTime, `employees` a une **clé primaire composite `(id, site_id)`** : `id` seul n'est unique que par site, deux sites peuvent porter le même. Le format hérité (id nu, posé par l'ancien import CSV) est encore reconnu par `_driver_existant` et réécrit au bon format au passage.
+- **`drivers.prenom` est nullable** depuis la migration 0004 : au dépannage, la fiche DepanTime ne porte souvent qu'un patronyme. Tout affichage doit tolérer `None` (`nomComplet()` côté front, `driver.prenom or ""` côté backend) — l'ancien import CSV *ignorait* ces lignes, ce qui aurait vidé la synchro.
+- **`/api/documents/export` est déclarée AVANT `/{version_id}`** dans `routers/documents.py`. FastAPI résout dans l'ordre de déclaration : l'inverse ferait lire `"export"` comme un UUID et répondrait 422.
 
 ## Commandes utiles
 
@@ -78,8 +98,14 @@ docker compose up -d --build
 # Logs backend (suivre)
 docker compose logs -f backend
 
-# Seed des types de documents (~20, idempotent — supprime aussi les types obsolètes)
+# Seed des types de documents (18, idempotent — supprime aussi les types obsolètes,
+# sauf ceux qui portent encore des documents réels). Ne repose PAS les niveaux
+# d'exigence réglés depuis l'app : ajouter --reset-niveaux pour les forcer.
 docker compose exec backend python -m scripts.seed_doctypes
+
+# Synchronisation manuelle de l'équipe depuis DepanTime (sinon : bouton dans l'app)
+curl -X POST -H "X-Internal-Secret: $REMINDERS_SECRET" \
+     https://formations.alex-worksmart.com/api/internal/sync/depantime
 
 # Seed demo (3 dépanneurs avec cellules de chaque couleur — DEV UNIQUEMENT)
 docker compose exec backend python -m scripts.seed_demo

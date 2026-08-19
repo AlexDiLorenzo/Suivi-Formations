@@ -1,12 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { api, clearToken, getToken, setToken } from './api.js'
-
-const STATUS_LABEL = {
-  green: 'Vert',
-  orange: 'Orange',
-  red: 'Rouge',
-  grey: 'Non applicable',
-}
 
 const MONTHS_FR = [
   'JANVIER', 'FÉVRIER', 'MARS', 'AVRIL', 'MAI', 'JUIN',
@@ -26,21 +19,48 @@ const DS_STATUS_LABEL = {
 const DS_TERMINAL = ['completed', 'declined', 'voided']
 const DS_IN_PROGRESS = ['created', 'sent', 'delivered', 'signed']
 
+// Les quatre familles : qui detient le document. La premiere releve du service
+// RH, les trois autres de l'exploitation.
 const CATEGORIE_ORDER = [
-  'permis_conduite',
-  'caces_autorisations',
+  'conduite_permis',
+  'habilitations_caces',
   'formations_internes',
-  'diplomes',
-  'administratif',
+  'rh_administratif',
 ]
 
 const CATEGORIE_LABEL = {
-  permis_conduite: 'Permis & conduite',
-  caces_autorisations: 'CACES & autorisations',
+  conduite_permis: 'Conduite & permis',
+  habilitations_caces: 'Habilitations & CACES',
   formations_internes: 'Formations internes',
-  diplomes: 'Diplomes',
-  administratif: 'Administratif RH',
+  rh_administratif: 'RH & administratif',
 }
+
+const CATEGORIE_DEFAUT = 'rh_administratif'
+
+const POLE_LABEL = {
+  conduite_permis: 'Exploitation',
+  habilitations_caces: 'Exploitation',
+  formations_internes: 'Exploitation',
+  rh_administratif: 'RH',
+}
+
+// Ce qui decide de l'ordre de la fiche : le socle d'abord, le reste replie.
+const NIVEAU_ORDER = ['obligatoire', 'profil', 'complementaire']
+
+const NIVEAU_LABEL = {
+  obligatoire: 'Socle obligatoire',
+  profil: 'Selon le profil',
+  complementaire: 'Complementaire',
+}
+
+const NIVEAU_AIDE = {
+  obligatoire: 'Attendu de tout depanneur, sans exception.',
+  profil: 'Attendu selon le permis et les engins conduits.',
+  complementaire: 'Utile a conserver ; son absence n\'est pas un manquement.',
+}
+
+// Seul le socle est deplie d'entree : c'est ce qu'on vient verifier en premier.
+const NIVEAU_OUVERT_PAR_DEFAUT = { obligatoire: true, profil: true, complementaire: false }
 
 function formatDateFr(iso) {
   if (!iso) return ''
@@ -48,34 +68,63 @@ function formatDateFr(iso) {
   return `${d}/${m}/${y}`
 }
 
-function daysSinceIso(iso) {
-  if (!iso) return null
-  const then = new Date(iso)
-  const now = new Date()
-  return Math.max(0, Math.floor((now.getTime() - then.getTime()) / 86400000))
-}
-
-function cellSubLabel(cell) {
-  if (cell.status === 'grey') return ''
-  if (cell.status === 'red') {
-    if (cell.reason === 'never_received') return 'Jamais transmis'
-    if (cell.reason === 'expired') {
-      const days = -cell.days_until_expiry
-      return `Perime depuis ${days}j`
-    }
-  }
-  if (cell.days_until_expiry != null) {
-    return `J-${cell.days_until_expiry}`
-  }
-  if (cell.status === 'green') return 'Valide'
-  return ''
-}
-
 function scoreClass(score) {
   if (score == null) return 'grey'
   if (score >= 90) return 'green'
   if (score >= 60) return 'orange'
   return 'red'
+}
+
+function nomComplet(driver) {
+  return [driver?.nom, driver?.prenom].filter(Boolean).join(' ')
+}
+
+function formatTaille(octets) {
+  if (!octets && octets !== 0) return ''
+  if (octets < 1024) return `${octets} o`
+  if (octets < 1024 * 1024) return `${Math.round(octets / 1024)} ko`
+  return `${(octets / (1024 * 1024)).toFixed(1)} Mo`
+}
+
+// Compteurs d'une ligne de la liste : ce qui manque, ce qui va expirer.
+function compterCellules(cells, docTypeById) {
+  const total = { manquants: 0, perimes: 0, expirent: 0, applicables: 0, valides: 0 }
+  for (const c of cells) {
+    if (c.status === 'grey') continue
+    total.applicables += 1
+    if (c.status === 'red') {
+      if (c.reason === 'expired') total.perimes += 1
+      else total.manquants += 1
+    } else {
+      total.valides += 1
+      if (c.status === 'orange') total.expirent += 1
+    }
+  }
+  // Un manque sur le socle obligatoire ne pese pas comme un manque sur un
+  // document complementaire : on le remonte a part pour la liste.
+  total.manquantsObligatoires = cells.filter((c) => {
+    if (c.status !== 'red') return false
+    const dt = docTypeById[c.document_type_id]
+    return dt?.niveau_exigence === 'obligatoire'
+  }).length
+  return total
+}
+
+// Date de peremption calculee depuis l'emission et la duree de validite du type.
+function peremptionCalculee(dateEmission, dureeJours) {
+  if (!dateEmission || !dureeJours) return ''
+  const d = new Date(`${dateEmission}T00:00:00`)
+  if (Number.isNaN(d.getTime())) return ''
+  d.setDate(d.getDate() + dureeJours)
+  const p = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+}
+
+function dureeLisible(jours) {
+  if (!jours) return null
+  if (jours % 365 === 0) return `${jours / 365} an${jours / 365 > 1 ? 's' : ''}`
+  if (jours % 30 === 0) return `${jours / 30} mois`
+  return `${jours} jours`
 }
 
 // =====================================================================
@@ -202,219 +251,477 @@ function ScoreBadge({ score }) {
   return <span className={`score-badge ${scoreClass(score)}`}>{score}%</span>
 }
 
-function SummaryBar({ summary }) {
-  const order = ['green', 'orange', 'red', 'grey']
-  return (
-    <div className="summary">
-      {summary.score_global != null && (
-        <span className={`summary-pill score-pill ${scoreClass(summary.score_global)}`}>
-          Conformité globale
-          <span className="count">{summary.score_global}%</span>
-        </span>
-      )}
-      {order.map((s) => (
-        <span className="summary-pill" key={s}>
-          <span className={`dot ${s}`} />
-          {STATUS_LABEL[s]}
-          <span className="count">{summary.by_status[s] ?? 0}</span>
-        </span>
-      ))}
-    </div>
-  )
-}
+// =====================================================================
+// Aperçu d'un document (sans quitter l'application)
+// =====================================================================
 
-function MatrixCell({ cell, onClick }) {
-  const clickable = cell.status !== 'grey'
-  const pending = cell.has_pending_version
-  const requested = !pending && cell.open_request_sent_at != null
-  const requestedDays = requested ? daysSinceIso(cell.open_request_sent_at) : null
-  const signing = !pending && !requested && DS_IN_PROGRESS.includes(cell.signature_status)
-
-  let visualStatus = cell.status
-  let sub = cellSubLabel(cell)
-  let tooltip = clickable ? 'Cliquer pour uploader / consulter' : 'Non applicable'
-
-  if (pending) {
-    visualStatus = 'pending'
-    sub = 'A valider'
-    tooltip = 'Version en attente de validation — clique pour valider'
-  } else if (requested) {
-    visualStatus = 'requested'
-    sub = requestedDays === 0 ? 'Demande aujourd\'hui' : `Demande il y a ${requestedDays}j`
-    tooltip = `Demande envoyee il y a ${requestedDays}j, en attente de reponse — clique pour relancer ou uploader`
-  } else if (signing) {
-    visualStatus = 'requested'
-    sub = 'Signature en cours'
-    tooltip = 'Attestation envoyee pour signature DocuSign — clique pour suivre le statut'
-  }
-
-  return (
-    <td
-      className={`cell ${visualStatus} ${clickable ? 'clickable' : ''}`}
-      onClick={clickable ? onClick : undefined}
-      title={tooltip}
-    >
-      {cell.status === 'grey' && !pending && !requested ? (
-        <span>—</span>
-      ) : (
-        <>
-          <span className="date">{cell.date_peremption ? formatDateFr(cell.date_peremption) : '—'}</span>
-          {sub && <span className="sub">{sub}</span>}
-        </>
-      )}
-    </td>
-  )
-}
-
-function ScoreFilterBar({ value, counts, onChange }) {
-  const bands = [
-    { key: 'all', label: 'Tous' },
-    { key: 'green', label: '≥ 90 %' },
-    { key: 'orange', label: '60–89 %' },
-    { key: 'red', label: '< 60 %' },
-  ]
-  return (
-    <div className="filter-bar">
-      <span className="filter-label">Conformité</span>
-      {bands.map((b) => (
-        <button
-          key={b.key}
-          type="button"
-          className={`filter-btn ${b.key} ${value === b.key ? 'active' : ''}`}
-          onClick={() => onChange(b.key)}
-        >
-          {b.label}
-          {b.key !== 'all' && <span className="filter-count">{counts[b.key]}</span>}
-        </button>
-      ))}
-    </div>
-  )
-}
-
-function DashboardView({ docTypes }) {
-  const [data, setData] = useState(null)
+function DocViewerModal({ versionId, titre, onClose }) {
+  const [doc, setDoc] = useState(null)
   const [error, setError] = useState('')
-  const [uploadCtx, setUploadCtx] = useState(null)
-  const [scoreFilter, setScoreFilter] = useState('all')
-  const matrixRef = useRef(null)
 
-  function reload() {
-    api.dashboard().then(setData).catch((e) => setError(e.detail || String(e)))
-  }
-
-  useEffect(reload, [])
-
-  // Permet de defiler la matrice horizontalement avec une simple molette
-  // verticale (souris sans scroll lateral). Listener natif non-passif :
-  // React enregistre onWheel en passif, preventDefault y serait ignore.
   useEffect(() => {
-    const el = matrixRef.current
-    if (!el) return undefined
-    function onWheel(e) {
-      if (el.scrollWidth <= el.clientWidth || e.deltaY === 0) return
-      // Si la matrice peut defiler verticalement (beaucoup de lignes), on
-      // laisse la molette faire son travail naturel : defiler vers le bas,
-      // en-tete fige. La conversion horizontale ne sert que sans debordement vertical.
-      if (el.scrollHeight > el.clientHeight) return
-      const atStart = el.scrollLeft <= 0
-      const atEnd = el.scrollLeft + el.clientWidth >= el.scrollWidth - 1
-      // Au bord, on laisse la page defiler verticalement comme d'habitude.
-      if ((e.deltaY < 0 && atStart) || (e.deltaY > 0 && atEnd)) return
-      el.scrollLeft += e.deltaY * (e.deltaMode === 1 ? 16 : 1)
-      e.preventDefault()
+    let objectUrl = null
+    let annule = false
+    api.documents
+      .openBlob(versionId)
+      .then((r) => {
+        if (annule) {
+          URL.revokeObjectURL(r.url)
+          return
+        }
+        objectUrl = r.url
+        setDoc(r)
+      })
+      .catch((e) => setError(e.detail || String(e)))
+    return () => {
+      annule = true
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
     }
-    el.addEventListener('wheel', onWheel, { passive: false })
-    return () => el.removeEventListener('wheel', onWheel)
-  }, [data, scoreFilter])
+  }, [versionId])
 
-  if (error) return <div className="error" style={{ padding: 24 }}>{error}</div>
-  if (!data) return <div className="empty">Chargement…</div>
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-card modal-viewer" onClick={(e) => e.stopPropagation()}>
+        <header className="modal-header">
+          <h2>{titre}</h2>
+          <div className="viewer-actions">
+            {doc && (
+              <>
+                <span className="muted">{formatTaille(doc.size)}</span>
+                <a className="btn btn-ghost btn-sm" href={doc.url} target="_blank" rel="noreferrer">
+                  Ouvrir dans un onglet
+                </a>
+                <a className="btn btn-ghost btn-sm" href={doc.url} download={doc.filename}>
+                  Télécharger
+                </a>
+              </>
+            )}
+            <button type="button" className="icon-btn" onClick={onClose} aria-label="Fermer">×</button>
+          </div>
+        </header>
+        <div className="viewer-body">
+          {error && <div className="error">{error}</div>}
+          {!doc && !error && <div className="empty">Chargement du document…</div>}
+          {doc && (
+            doc.type.startsWith('image/') ? (
+              <img src={doc.url} alt={doc.filename} />
+            ) : (
+              <iframe src={doc.url} title={doc.filename} />
+            )
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// =====================================================================
+// Liste des dépanneurs (écran d'accueil)
+// =====================================================================
+
+function PastilleEtat({ compte, ton, libelle }) {
+  if (!compte) return <span className="pastille vide">—</span>
+  return (
+    <span className={`pastille ${ton}`} title={libelle}>
+      {compte}
+    </span>
+  )
+}
+
+function DriversListView({ docTypes, onOuvrirFiche, rafraichir, data, onSync, syncStatut, syncEnCours }) {
+  const [recherche, setRecherche] = useState('')
+  const [filtre, setFiltre] = useState('tous')
+  const [exportEnCours, setExportEnCours] = useState(false)
+  const [message, setMessage] = useState('')
 
   const docTypeById = Object.fromEntries(docTypes.map((dt) => [dt.id, dt]))
 
-  const bandCounts = { green: 0, orange: 0, red: 0 }
-  for (const d of data.drivers) {
-    const band = scoreClass(d.score)
-    if (band in bandCounts) bandCounts[band] += 1
+  async function exporterTout() {
+    setMessage('')
+    setExportEnCours(true)
+    try {
+      await api.documents.exportZip({})
+    } catch (err) {
+      setMessage(err.detail || 'Erreur lors de l\'export')
+    } finally {
+      setExportEnCours(false)
+    }
   }
-  const visibleDrivers =
-    scoreFilter === 'all'
-      ? data.drivers
-      : data.drivers.filter((d) => scoreClass(d.score) === scoreFilter)
 
-  function openUpload(driver, cell) {
-    setUploadCtx({
-      driver,
-      docType: docTypeById[cell.document_type_id] || data.doc_types.find((d) => d.id === cell.document_type_id),
-      currentVersionId: cell.current_version_id,
-      pendingVersionId: cell.pending_version_id,
-    })
+  if (!data) return <div className="empty">Chargement…</div>
+
+  const lignes = data.drivers.map((d) => ({ driver: d, compte: compterCellules(d.cells, docTypeById) }))
+  const q = recherche.trim().toLowerCase()
+  const visibles = lignes.filter(({ driver, compte }) => {
+    if (q && !nomComplet(driver).toLowerCase().includes(q)) return false
+    if (filtre === 'incomplets') return compte.manquants + compte.perimes > 0
+    if (filtre === 'socle') return compte.manquantsObligatoires > 0
+    if (filtre === 'expirent') return compte.expirent > 0
+    return true
+  })
+
+  const compteurs = {
+    incomplets: lignes.filter((l) => l.compte.manquants + l.compte.perimes > 0).length,
+    socle: lignes.filter((l) => l.compte.manquantsObligatoires > 0).length,
+    expirent: lignes.filter((l) => l.compte.expirent > 0).length,
   }
 
   return (
     <>
-      <SummaryBar summary={data.summary} />
-      {data.drivers.length === 0 ? (
-        <div className="empty">
-          Aucun depanneur actif. Ajoute-en depuis l'onglet Depanneurs ou lance{' '}
-          <code>scripts.seed_demo</code> en dev.
+      <div className="entete-page">
+        <div>
+          <h2>Dépanneurs</h2>
+          <p className="muted">
+            {data.drivers.length} actifs · conformité globale{' '}
+            {data.summary.score_global != null ? `${data.summary.score_global}%` : '—'}
+          </p>
         </div>
-      ) : (
-        <>
-          <ScoreFilterBar value={scoreFilter} counts={bandCounts} onChange={setScoreFilter} />
-          {visibleDrivers.length === 0 ? (
-            <div className="empty">Aucun depanneur a ce niveau de conformite.</div>
-          ) : (
-            <div className="matrix-wrap" ref={matrixRef}>
-              <table className="matrix">
-                <thead>
-                  <tr>
-                    <th className="driver-col">Depanneur</th>
-                    <th className="score-col">Score</th>
-                    {data.doc_types.map((dt) => (
-                      <th key={dt.id}>{dt.libelle}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {visibleDrivers.map((d) => (
-                    <tr key={d.id}>
-                      <td className="driver-col">
-                        <strong>{d.nom}</strong> {d.prenom}
-                      </td>
-                      <td className="score-col">
-                        <ScoreBadge score={d.score} />
-                      </td>
-                      {d.cells.map((c) => (
-                        <MatrixCell
-                          key={c.document_type_id}
-                          cell={c}
-                          onClick={() => openUpload(d, c)}
-                        />
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+        <div className="entete-actions">
+          {syncStatut?.active && (
+            <button className="btn btn-ghost" onClick={onSync} disabled={syncEnCours}
+              title="Aligner la liste sur l'équipe du dépannage dans DepanTime">
+              {syncEnCours ? 'Synchronisation…' : '⟳ Synchroniser DepanTime'}
+            </button>
           )}
-        </>
+          <button className="btn btn-ghost" onClick={exporterTout} disabled={exportEnCours}
+            title="Archive ZIP de tous les documents à jour, un dossier par dépanneur">
+            {exportEnCours ? 'Préparation…' : '⬇ Tout exporter (ZIP)'}
+          </button>
+        </div>
+      </div>
+
+      {message && <div className="error">{message}</div>}
+
+      <div className="barre-filtres">
+        <input
+          className="recherche"
+          type="search"
+          placeholder="Rechercher un dépanneur…"
+          value={recherche}
+          onChange={(e) => setRecherche(e.target.value)}
+        />
+        {[
+          { cle: 'tous', libelle: 'Tous' },
+          { cle: 'socle', libelle: 'Socle incomplet', compte: compteurs.socle, ton: 'red' },
+          { cle: 'incomplets', libelle: 'Manquants ou périmés', compte: compteurs.incomplets, ton: 'red' },
+          { cle: 'expirent', libelle: 'Expirent sous 90 j', compte: compteurs.expirent, ton: 'orange' },
+        ].map((f) => (
+          <button
+            key={f.cle}
+            type="button"
+            className={`filter-btn ${filtre === f.cle ? 'active' : ''}`}
+            onClick={() => setFiltre(f.cle)}
+          >
+            {f.libelle}
+            {f.compte != null && <span className="filter-count">{f.compte}</span>}
+          </button>
+        ))}
+        <button type="button" className="btn btn-ghost btn-sm" onClick={rafraichir}>Actualiser</button>
+      </div>
+
+      {visibles.length === 0 ? (
+        <div className="empty">Aucun dépanneur ne correspond.</div>
+      ) : (
+        <div className="liste-depanneurs">
+          <div className="ligne-depanneur entete">
+            <span>Dépanneur</span>
+            <span>Conformité</span>
+            <span className="col-num">Socle</span>
+            <span className="col-num">Manquants</span>
+            <span className="col-num">Périmés</span>
+            <span className="col-num">Expirent</span>
+            <span />
+          </div>
+          {visibles.map(({ driver, compte }) => (
+            <button
+              type="button"
+              key={driver.id}
+              className="ligne-depanneur"
+              onClick={() => onOuvrirFiche(driver.id)}
+            >
+              <span className="nom">
+                <strong>{driver.nom}</strong> {driver.prenom || ''}
+              </span>
+              <span className="conformite">
+                <ScoreBadge score={driver.score} />
+                <span className="barre-score">
+                  <span
+                    className={`remplissage ${scoreClass(driver.score)}`}
+                    style={{ width: `${driver.score ?? 0}%` }}
+                  />
+                </span>
+              </span>
+              <span className="col-num">
+                <PastilleEtat compte={compte.manquantsObligatoires} ton="red"
+                  libelle="documents du socle obligatoire manquants" />
+              </span>
+              <span className="col-num">
+                <PastilleEtat compte={compte.manquants} ton="red" libelle="jamais transmis" />
+              </span>
+              <span className="col-num">
+                <PastilleEtat compte={compte.perimes} ton="red" libelle="périmés" />
+              </span>
+              <span className="col-num">
+                <PastilleEtat compte={compte.expirent} ton="orange" libelle="expirent sous 90 jours" />
+              </span>
+              <span className="chevron">→</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </>
+  )
+}
+
+// =====================================================================
+// Fiche d'un dépanneur
+// =====================================================================
+
+function LigneDocument({ docType, cell, onDeposer, onVoir, reglage, onChangerNiveau }) {
+  const [survol, setSurvol] = useState(false)
+  const absent = cell.status === 'red'
+  const perime = absent && cell.reason === 'expired'
+
+  function onDrop(e) {
+    e.preventDefault()
+    setSurvol(false)
+    const fichier = e.dataTransfer.files?.[0]
+    if (fichier) onDeposer(fichier)
+  }
+
+  return (
+    <div
+      className={`ligne-doc ${cell.status} ${survol ? 'survol' : ''}`}
+      onDragOver={(e) => { e.preventDefault(); setSurvol(true) }}
+      onDragLeave={() => setSurvol(false)}
+      onDrop={onDrop}
+    >
+      <span className="doc-libelle">
+        {docType.libelle}
+        <span className="doc-categorie">{CATEGORIE_LABEL[docType.categorie] || '—'}</span>
+      </span>
+
+      <span className="doc-etat">
+        {absent ? (
+          <span className={`etat ${perime ? 'perime' : 'manquant'}`}>
+            {perime
+              ? `Périmé depuis ${-cell.days_until_expiry} j`
+              : 'Jamais transmis'}
+          </span>
+        ) : (
+          <>
+            <span className={`etat ${cell.status}`}>
+              {cell.date_peremption ? formatDateFr(cell.date_peremption) : 'Valide'}
+            </span>
+            {cell.days_until_expiry != null && (
+              <span className="compte-a-rebours">J-{cell.days_until_expiry}</span>
+            )}
+          </>
+        )}
+        {cell.has_pending_version && <span className="tag tag-pending">à valider</span>}
+      </span>
+
+      {reglage ? (
+        <span className="doc-actions">
+          <select
+            value={docType.niveau_exigence}
+            onChange={(e) => onChangerNiveau(docType, e.target.value)}
+            title="Niveau d'exigence de ce document"
+          >
+            {NIVEAU_ORDER.map((n) => (
+              <option key={n} value={n}>{NIVEAU_LABEL[n]}</option>
+            ))}
+          </select>
+        </span>
+      ) : (
+        <span className="doc-actions">
+          {cell.current_version_id && (
+            <button type="button" className="btn btn-ghost btn-sm"
+              onClick={() => onVoir(cell.current_version_id)} title="Voir le document">
+              Voir
+            </button>
+          )}
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => onDeposer(null)}>
+            {cell.current_version_id ? 'Remplacer' : 'Déposer'}
+          </button>
+        </span>
+      )}
+    </div>
+  )
+}
+
+function DriverSheetView({ driverId, docTypes, data, onRetour, rafraichir, onModifier }) {
+  const [ouvertes, setOuvertes] = useState(NIVEAU_OUVERT_PAR_DEFAUT)
+  const [upload, setUpload] = useState(null)   // { docType, cell, fichier }
+  const [apercu, setApercu] = useState(null)   // { versionId, titre }
+  const [exportEnCours, setExportEnCours] = useState(false)
+  const [reglage, setReglage] = useState(false)
+  const [message, setMessage] = useState('')
+
+  const driver = data?.drivers.find((d) => d.id === driverId)
+  const docTypeById = Object.fromEntries(docTypes.map((dt) => [dt.id, dt]))
+
+  async function exporterFiche() {
+    setMessage('')
+    setExportEnCours(true)
+    try {
+      await api.documents.exportZip({ driverId })
+    } catch (err) {
+      setMessage(err.detail || 'Erreur lors de l\'export')
+    } finally {
+      setExportEnCours(false)
+    }
+  }
+
+  async function changerNiveau(docType, niveau) {
+    setMessage('')
+    try {
+      await api.updateDocType(docType.id, { niveau_exigence: niveau })
+      rafraichir()
+    } catch (err) {
+      setMessage(err.detail || 'Erreur lors du changement de niveau')
+    }
+  }
+
+  if (!driver) {
+    return (
+      <div className="empty">
+        Dépanneur introuvable ou archivé. <button className="btn btn-ghost btn-sm" onClick={onRetour}>Retour</button>
+      </div>
+    )
+  }
+
+  const compte = compterCellules(driver.cells, docTypeById)
+
+  // Cellules applicables uniquement : le gris (non applicable) n'a rien à faire
+  // sur la fiche, il n'y a rien à y déposer.
+  const applicables = driver.cells
+    .map((c) => ({ cell: c, docType: docTypeById[c.document_type_id] }))
+    .filter((x) => x.docType && x.cell.status !== 'grey')
+
+  const parNiveau = NIVEAU_ORDER.map((niveau) => {
+    const items = applicables.filter((x) => x.docType.niveau_exigence === niveau)
+    const parCategorie = CATEGORIE_ORDER.map((cat) => ({
+      cat,
+      items: items
+        .filter((x) => (x.docType.categorie || CATEGORIE_DEFAUT) === cat)
+        .sort((a, b) => a.docType.display_order - b.docType.display_order),
+    })).filter((g) => g.items.length > 0)
+    const ok = items.filter((x) => x.cell.status !== 'red').length
+    return { niveau, items, parCategorie, ok }
+  }).filter((g) => g.items.length > 0)
+
+  const nonApplicables = driver.cells.filter((c) => c.status === 'grey').length
+
+  return (
+    <>
+      <div className="fil-ariane">
+        <button type="button" className="btn btn-ghost btn-sm" onClick={onRetour}>← Dépanneurs</button>
+      </div>
+
+      <div className="entete-fiche">
+        <div>
+          <h2>{driver.nom} {driver.prenom || ''}</h2>
+          <p className="muted">
+            {driver.email || 'Pas d\'email'}
+            {driver.profil ? ` · ${driver.profil === 'permis_c_ce' ? 'Permis C/CE' : 'Permis B'}` : ' · profil non renseigné'}
+            {nonApplicables > 0 && ` · ${nonApplicables} document(s) non applicable(s)`}
+          </p>
+        </div>
+        <div className="entete-actions">
+          <span className={`score-badge ${scoreClass(driver.score)}`}>
+            {driver.score != null ? `${driver.score}%` : '—'}
+          </span>
+          <button className="btn btn-ghost" onClick={() => onModifier(driver)}>Modifier la fiche</button>
+          <button className="btn btn-ghost" onClick={exporterFiche} disabled={exportEnCours}
+            title="Archive ZIP des documents à jour, nommés proprement">
+            {exportEnCours ? 'Préparation…' : '⬇ Dossier ZIP'}
+          </button>
+          <button
+            className={`btn btn-ghost ${reglage ? 'actif' : ''}`}
+            onClick={() => setReglage((v) => !v)}
+            title="Régler quels documents sont obligatoires"
+          >
+            ⚙ Niveaux
+          </button>
+        </div>
+      </div>
+
+      <div className="resume-fiche">
+        <span><strong>{compte.valides}</strong> / {compte.applicables} à jour</span>
+        {compte.manquantsObligatoires > 0 && (
+          <span className="alerte">{compte.manquantsObligatoires} manque(s) sur le socle</span>
+        )}
+        {compte.perimes > 0 && <span className="alerte">{compte.perimes} périmé(s)</span>}
+        {compte.expirent > 0 && <span className="attention">{compte.expirent} expire(nt) sous 90 j</span>}
+      </div>
+
+      {message && <div className="error">{message}</div>}
+      {reglage && (
+        <div className="bandeau-info">
+          Réglage des niveaux : ce choix vaut pour <strong>tous</strong> les dépanneurs, pas
+          seulement celui-ci.
+        </div>
       )}
 
-      {uploadCtx && (
+      {parNiveau.map(({ niveau, items, parCategorie, ok }) => (
+        <section key={niveau} className={`bloc-niveau ${niveau}`}>
+          <button
+            type="button"
+            className="entete-bloc"
+            onClick={() => setOuvertes((o) => ({ ...o, [niveau]: !o[niveau] }))}
+          >
+            <span className="chevron-bloc">{ouvertes[niveau] ? '▼' : '▶'}</span>
+            <span className="titre-bloc">{NIVEAU_LABEL[niveau]}</span>
+            <span className="aide-bloc">{NIVEAU_AIDE[niveau]}</span>
+            <span className={`compteur-bloc ${ok === items.length ? 'complet' : 'incomplet'}`}>
+              {ok}/{items.length}
+            </span>
+          </button>
+
+          {ouvertes[niveau] && (
+            <div className="corps-bloc">
+              {parCategorie.map(({ cat, items: docs }) => (
+                <div key={cat} className="groupe-categorie">
+                  <h4>
+                    {CATEGORIE_LABEL[cat]}
+                    <span className="pole">{POLE_LABEL[cat]}</span>
+                  </h4>
+                  {docs.map(({ docType, cell }) => (
+                    <LigneDocument
+                      key={docType.id}
+                      docType={docType}
+                      cell={cell}
+                      reglage={reglage}
+                      onChangerNiveau={changerNiveau}
+                      onVoir={(versionId) => setApercu({ versionId, titre: docType.libelle })}
+                      onDeposer={(fichier) => setUpload({ docType, cell, fichier })}
+                    />
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      ))}
+
+      {upload && (
         <UploadModal
-          driver={uploadCtx.driver}
-          docType={uploadCtx.docType}
-          currentVersionId={uploadCtx.currentVersionId}
-          pendingVersionId={uploadCtx.pendingVersionId}
-          onClose={() => {
-            setUploadCtx(null)
-            reload()
-          }}
-          onUploaded={() => {
-            setUploadCtx(null)
-            reload()
-          }}
+          driver={driver}
+          docType={upload.docType}
+          fichierInitial={upload.fichier}
+          currentVersionId={upload.cell.current_version_id}
+          pendingVersionId={upload.cell.pending_version_id}
+          onVoir={(versionId, titre) => setApercu({ versionId, titre })}
+          onClose={() => { setUpload(null); rafraichir() }}
+          onUploaded={() => { setUpload(null); rafraichir() }}
+        />
+      )}
+      {apercu && (
+        <DocViewerModal
+          versionId={apercu.versionId}
+          titre={apercu.titre}
+          onClose={() => setApercu(null)}
         />
       )}
     </>
@@ -546,20 +853,18 @@ function DocusignSection({ driver, docType }) {
   )
 }
 
-function UploadModal({ driver, docType, currentVersionId, pendingVersionId, onClose, onUploaded }) {
-  const [file, setFile] = useState(null)
+function UploadModal({
+  driver, docType, currentVersionId, pendingVersionId, fichierInitial,
+  onVoir, onClose, onUploaded,
+}) {
+  const [file, setFile] = useState(fichierInitial || null)
   const [dateEmission, setDateEmission] = useState('')
   const [datePeremption, setDatePeremption] = useState('')
   const [peremptionTouched, setPeremptionTouched] = useState(false)
   const [uploading, setUploading] = useState(false)
-  const [downloading, setDownloading] = useState(false)
-  const [requesting, setRequesting] = useState(false)
-  const [requestResult, setRequestResult] = useState(null)
-  const [linkCopied, setLinkCopied] = useState(false)
   const [error, setError] = useState('')
   const [pendingVersion, setPendingVersion] = useState(null)
   const [reviewing, setReviewing] = useState(false)
-  const [downloadingPending, setDownloadingPending] = useState(false)
 
   useEffect(() => {
     if (!pendingVersionId) {
@@ -568,17 +873,6 @@ function UploadModal({ driver, docType, currentVersionId, pendingVersionId, onCl
     }
     api.documents.get(pendingVersionId).then(setPendingVersion).catch(() => {})
   }, [pendingVersionId])
-
-  async function handleDownloadPending() {
-    setDownloadingPending(true)
-    try {
-      await api.documents.download(pendingVersionId)
-    } catch (err) {
-      setError(err.detail || 'Erreur lors du telechargement')
-    } finally {
-      setDownloadingPending(false)
-    }
-  }
 
   async function handleValidate() {
     if (!confirm('Valider cette version ? Elle deviendra la version courante.')) return
@@ -594,10 +888,10 @@ function UploadModal({ driver, docType, currentVersionId, pendingVersionId, onCl
   }
 
   async function handleReject() {
-    const reason = prompt('Motif du rejet (sera communique au depanneur lors de la nouvelle demande) :')
+    const reason = prompt('Motif du rejet :')
     if (reason === null) return
     if (reason.trim().length < 3) {
-      alert('Le motif doit contenir au moins 3 caracteres.')
+      alert('Le motif doit contenir au moins 3 caractères.')
       return
     }
     setError('')
@@ -611,40 +905,13 @@ function UploadModal({ driver, docType, currentVersionId, pendingVersionId, onCl
     }
   }
 
-  async function handleCreateRequest() {
-    setError('')
-    setRequesting(true)
-    try {
-      const created = await api.documentRequests.create({
-        driverId: driver.id,
-        documentTypeId: docType.id,
-      })
-      setRequestResult(created)
-    } catch (err) {
-      setError(err.detail || 'Erreur lors de la creation de la demande')
-    } finally {
-      setRequesting(false)
-    }
-  }
-
-  async function handleCopyLink() {
-    if (!requestResult?.magic_link) return
-    try {
-      await navigator.clipboard.writeText(requestResult.magic_link)
-      setLinkCopied(true)
-      setTimeout(() => setLinkCopied(false), 2000)
-    } catch {
-      /* clipboard refusee, l'utilisateur peut copier manuellement */
-    }
-  }
+  const duree = docType?.duree_validite_jours_default
 
   function handleEmissionChange(value) {
     setDateEmission(value)
-    if (!peremptionTouched && value && docType?.duree_validite_jours_default) {
-      const d = new Date(value)
-      d.setDate(d.getDate() + docType.duree_validite_jours_default)
-      const iso = d.toISOString().slice(0, 10)
-      setDatePeremption(iso)
+    if (!peremptionTouched) {
+      const calculee = peremptionCalculee(value, duree)
+      if (calculee) setDatePeremption(calculee)
     }
   }
 
@@ -657,7 +924,7 @@ function UploadModal({ driver, docType, currentVersionId, pendingVersionId, onCl
     e.preventDefault()
     setError('')
     if (!file) {
-      setError('Selectionne un fichier PDF')
+      setError('Sélectionne un fichier PDF')
       return
     }
     setUploading(true)
@@ -676,32 +943,21 @@ function UploadModal({ driver, docType, currentVersionId, pendingVersionId, onCl
     }
   }
 
-  async function handleDownload() {
-    if (!currentVersionId) return
-    setDownloading(true)
-    try {
-      await api.documents.download(currentVersionId)
-    } catch (err) {
-      setError(err.detail || 'Erreur lors du telechargement')
-    } finally {
-      setDownloading(false)
-    }
-  }
-
   const perimable = docType?.est_perimable !== false
 
   return (
     <div className="modal-overlay" onClick={onClose}>
       <form className="modal-card" onClick={(e) => e.stopPropagation()} onSubmit={handleSubmit}>
         <header className="modal-header">
-          <h2>Document — {docType?.libelle}</h2>
+          <h2>{docType?.libelle}</h2>
           <button type="button" className="icon-btn" onClick={onClose} aria-label="Fermer">×</button>
         </header>
 
         <div className="modal-body">
           <p className="hint">
-            <strong>{driver.nom} {driver.prenom}</strong>
-            {' · '}{docType?.code}
+            <strong>{driver.nom} {driver.prenom || ''}</strong>
+            {' · '}{CATEGORIE_LABEL[docType?.categorie] || docType?.code}
+            {' · '}{NIVEAU_LABEL[docType?.niveau_exigence]}
           </p>
 
           {pendingVersionId && (
@@ -712,46 +968,32 @@ function UploadModal({ driver, docType, currentVersionId, pendingVersionId, onCl
               {pendingVersion ? (
                 <ul className="pending-meta">
                   <li>
-                    Uploade par <strong>{pendingVersion.uploaded_by === 'driver' ? 'le depanneur' : 'admin'}</strong>
+                    Déposée par <strong>{pendingVersion.uploaded_by === 'driver' ? 'le dépanneur' : 'un admin'}</strong>
                     {' '}le {formatDateFr(pendingVersion.uploaded_at.slice(0, 10))}
                   </li>
                   <li>
-                    Emission : <strong>{formatDateFr(pendingVersion.date_emission)}</strong>
+                    Émission : <strong>{formatDateFr(pendingVersion.date_emission)}</strong>
                     {' · '}
                     {pendingVersion.date_peremption ? (
-                      <>Peremption : <strong>{formatDateFr(pendingVersion.date_peremption)}</strong></>
+                      <>Péremption : <strong>{formatDateFr(pendingVersion.date_peremption)}</strong></>
                     ) : (
-                      <span className="hint">Non perimable</span>
+                      <span className="hint">Non périmable</span>
                     )}
                   </li>
-                  <li>Fichier : {pendingVersion.original_filename} ({Math.round(pendingVersion.file_size_bytes / 1024)} ko)</li>
+                  <li>{pendingVersion.original_filename} ({formatTaille(pendingVersion.file_size_bytes)})</li>
                 </ul>
               ) : (
-                <p className="hint">Chargement des details…</p>
+                <p className="hint">Chargement des détails…</p>
               )}
               <div className="pending-actions">
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-sm"
-                  onClick={handleDownloadPending}
-                  disabled={downloadingPending}
-                >
-                  {downloadingPending ? '…' : 'Telecharger'}
+                <button type="button" className="btn btn-ghost btn-sm"
+                  onClick={() => onVoir(pendingVersionId, `${docType.libelle} (en attente)`)}>
+                  Voir
                 </button>
-                <button
-                  type="button"
-                  className="btn btn-sm"
-                  onClick={handleValidate}
-                  disabled={reviewing}
-                >
+                <button type="button" className="btn btn-sm" onClick={handleValidate} disabled={reviewing}>
                   Valider
                 </button>
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-sm danger"
-                  onClick={handleReject}
-                  disabled={reviewing}
-                >
+                <button type="button" className="btn btn-ghost btn-sm danger" onClick={handleReject} disabled={reviewing}>
                   Rejeter
                 </button>
               </div>
@@ -760,86 +1002,35 @@ function UploadModal({ driver, docType, currentVersionId, pendingVersionId, onCl
 
           {currentVersionId && (
             <div className="info-block">
-              <span>Une version est deja en base.</span>
-              <button
-                type="button"
-                className="btn btn-ghost btn-sm"
-                onClick={handleDownload}
-                disabled={downloading}
-              >
-                {downloading ? '…' : 'Telecharger la version actuelle'}
+              <span>Une version est déjà en base ; le dépôt en crée une nouvelle sans l'écraser.</span>
+              <button type="button" className="btn btn-ghost btn-sm"
+                onClick={() => onVoir(currentVersionId, docType.libelle)}>
+                Voir la version actuelle
               </button>
             </div>
           )}
 
-          {docType?.mode_acquisition === 'docusign' ? (
+          {docType?.mode_acquisition === 'docusign' && (
             <DocusignSection driver={driver} docType={docType} />
-          ) : (
-          <div className="section">
-            <h3>Demander au depanneur</h3>
-            <p className="hint">
-              Genere une demande a usage unique (valide 7 jours). Si le
-              depanneur a un email enregistre, il recoit automatiquement
-              le lien securise. Sinon le lien s'affiche ici, copiable pour
-              envoi WhatsApp / SMS.
-            </p>
-            {!requestResult ? (
-              <button
-                type="button"
-                className="btn btn-ghost"
-                onClick={handleCreateRequest}
-                disabled={requesting}
-              >
-                {requesting ? 'Envoi…' : 'Envoyer la demande'}
-              </button>
-            ) : (
-              <>
-                {requestResult.email_sent ? (
-                  <div className="email-status success">
-                    ✓ Email envoye a <strong>{requestResult.driver_email}</strong>
-                  </div>
-                ) : (
-                  <div className="email-status warn">
-                    {requestResult.email_error || 'Email non envoye'} — copie le lien ci-dessous :
-                  </div>
-                )}
-                <div className="magic-link">
-                  <input
-                    type="text"
-                    readOnly
-                    value={requestResult.magic_link}
-                    onFocus={(e) => e.target.select()}
-                  />
-                  <button type="button" className="btn btn-sm" onClick={handleCopyLink}>
-                    {linkCopied ? 'Copie ✓' : 'Copier'}
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
           )}
 
           <div className="section">
-            <h3>{currentVersionId ? 'Nouvelle version (admin)' : 'Premier upload (admin)'}</h3>
-            <p className="hint">
-              Si tu as deja le PDF, tu peux l'uploader directement. La version
-              sera creee comme validee. L'ancienne reste archivee en base
-              (jamais d'ecrasement).
-            </p>
+            <h3>{currentVersionId ? 'Nouvelle version' : 'Dépôt du document'}</h3>
 
             <div className="field">
-              <label>Fichier (PDF, max 10 MB) *</label>
+              <label>Fichier (PDF, max 10 Mo) *</label>
               <input
                 type="file"
                 accept="application/pdf"
                 onChange={(e) => setFile(e.target.files?.[0] || null)}
-                required
+                required={!file}
               />
+              {file && <p className="hint">{file.name} — {formatTaille(file.size)}</p>}
             </div>
 
             <div className="grid-2">
               <div className="field">
-                <label>Date d'emission *</label>
+                <label>Date d'émission *</label>
                 <input
                   type="date"
                   value={dateEmission}
@@ -849,7 +1040,7 @@ function UploadModal({ driver, docType, currentVersionId, pendingVersionId, onCl
               </div>
               {perimable && (
                 <div className="field">
-                  <label>Date de peremption *</label>
+                  <label>Date de péremption *</label>
                   <input
                     type="date"
                     value={datePeremption}
@@ -859,8 +1050,14 @@ function UploadModal({ driver, docType, currentVersionId, pendingVersionId, onCl
                 </div>
               )}
             </div>
+            {perimable && duree && (
+              <p className="hint">
+                Validité habituelle : {dureeLisible(duree)}. La péremption se calcule toute seule
+                depuis l'émission — corrige-la si le document dit autre chose.
+              </p>
+            )}
             {!perimable && (
-              <p className="hint">Ce document n'est pas perimable : aucune date de peremption a saisir.</p>
+              <p className="hint">Ce document n'expire pas : aucune date de péremption à saisir.</p>
             )}
           </div>
 
@@ -870,7 +1067,7 @@ function UploadModal({ driver, docType, currentVersionId, pendingVersionId, onCl
         <footer className="modal-footer">
           <button type="button" className="btn btn-ghost" onClick={onClose}>Annuler</button>
           <button type="submit" className="btn" disabled={uploading}>
-            {uploading ? 'Envoi…' : 'Uploader'}
+            {uploading ? 'Envoi…' : 'Enregistrer'}
           </button>
         </footer>
       </form>
@@ -962,7 +1159,7 @@ function DriverFormModal({ driver, docTypes, profils, onClose, onSaved }) {
   }
 
   const groupedDocTypes = CATEGORIE_ORDER
-    .map((cat) => ({ cat, items: docTypes.filter((dt) => (dt.categorie || 'administratif') === cat) }))
+    .map((cat) => ({ cat, items: docTypes.filter((dt) => (dt.categorie || CATEGORIE_DEFAUT) === cat) }))
     .filter((g) => g.items.length > 0)
 
   return (
@@ -1057,7 +1254,7 @@ function DriverFormModal({ driver, docTypes, profils, onClose, onSaved }) {
   )
 }
 
-function DriversView({ docTypes, profils }) {
+function DriversView({ docTypes, profils, syncStatut, onApresModification }) {
   const [drivers, setDrivers] = useState(null)
   const [error, setError] = useState('')
   const [includeArchived, setIncludeArchived] = useState(false)
@@ -1074,42 +1271,40 @@ function DriversView({ docTypes, profils }) {
   useEffect(reload, [includeArchived])
 
   async function handleArchive(driver) {
-    if (!confirm(`Archiver ${driver.prenom} ${driver.nom} ?`)) return
+    if (!confirm(`Archiver ${nomComplet(driver)} ?`)) return
     try {
       await api.drivers.archive(driver.id)
       reload()
+      onApresModification?.()
     } catch (err) {
       alert(err.detail || 'Erreur lors de l\'archivage')
     }
   }
 
-  async function handleBulkRequest(driver) {
-    const ok = confirm(
-      `Envoyer une demande pour tous les documents manquants ou perimes de ${driver.prenom} ${driver.nom} ?\n\n` +
-      `Si ${driver.prenom} a un email enregistre, un mail recap sera envoye automatiquement.`
-    )
-    if (!ok) return
-    try {
-      const r = await api.documentRequests.bulk(driver.id)
-      if (r.count === 0) {
-        alert(r.email_error || 'Aucun document a demander')
-        return
-      }
-      const emailLine = r.email_sent
-        ? `\n\nEmail envoye a ${r.driver_email}.`
-        : `\n\n${r.email_error || 'Email non envoye.'} Liens disponibles dans le retour API.`
-      alert(`${r.count} demande(s) creee(s).${emailLine}`)
-    } catch (err) {
-      alert(err.detail || 'Erreur lors de l\'envoi des demandes')
-    }
-  }
-
   const docTypeById = Object.fromEntries(docTypes.map((dt) => [dt.id, dt]))
+  const synchronise = syncStatut?.active
 
   return (
     <>
+      <div className="entete-page">
+        <div>
+          <h2>Équipe & applicabilité</h2>
+          <p className="muted">
+            Le profil de permis et les documents applicables à chacun se règlent ici.
+          </p>
+        </div>
+      </div>
+
+      {synchronise && (
+        <div className="bandeau-info">
+          La liste est alimentée par <strong>DepanTime</strong> : un dépanneur ajouté ou archivé
+          là-bas l'est aussi ici. Une fiche créée à la main reste possible, mais elle ne sera pas
+          suivie par la synchronisation.
+        </div>
+      )}
+
       <div className="toolbar">
-        <button className="btn" onClick={() => setEditing('new')}>+ Nouveau depanneur</button>
+        <button className="btn" onClick={() => setEditing('new')}>+ Nouveau dépanneur</button>
         <label className="check inline">
           <input
             type="checkbox"
@@ -1124,7 +1319,12 @@ function DriversView({ docTypes, profils }) {
       {!drivers && !error && <div className="empty">Chargement…</div>}
 
       {drivers && drivers.length === 0 && (
-        <div className="empty">Aucun depanneur. Clique sur "+ Nouveau" pour commencer.</div>
+        <div className="empty">
+          Aucun dépanneur.{' '}
+          {synchronise
+            ? 'Lance la synchronisation depuis l\'onglet Dépanneurs.'
+            : 'Clique sur « + Nouveau » pour commencer.'}
+        </div>
       )}
 
       {drivers && drivers.length > 0 && (
@@ -1145,7 +1345,7 @@ function DriversView({ docTypes, profils }) {
               {drivers.map((d) => (
                 <tr key={d.id} className={d.statut === 'archived' ? 'is-archived' : ''}>
                   <td>
-                    <strong>{d.nom}</strong> {d.prenom}
+                    <strong>{d.nom}</strong> {d.prenom || ''}
                   </td>
                   <td>{d.email || '—'}</td>
                   <td>{d.telephone || '—'}</td>
@@ -1174,17 +1374,8 @@ function DriversView({ docTypes, profils }) {
                   </td>
                   <td className="actions">
                     <button className="btn btn-ghost btn-sm" onClick={() => setEditing(d)}>
-                      Editer
+                      Éditer
                     </button>
-                    {d.statut !== 'archived' && d.required_document_type_ids.length > 0 && (
-                      <button
-                        className="btn btn-ghost btn-sm"
-                        onClick={() => handleBulkRequest(d)}
-                        title="Envoyer une demande pour tous les docs manquants ou perimes"
-                      >
-                        Envoyer demandes
-                      </button>
-                    )}
                     {d.statut !== 'archived' && (
                       <button className="btn btn-ghost btn-sm danger" onClick={() => handleArchive(d)}>
                         Archiver
@@ -1226,16 +1417,16 @@ function NavBar({ view, onChangeView, me, onLogout }) {
         <h1>Habilitations</h1>
         <nav className="tabs">
           <button
-            className={`tab ${view === 'dashboard' ? 'active' : ''}`}
-            onClick={() => onChangeView('dashboard')}
+            className={`tab ${view === 'depanneurs' ? 'active' : ''}`}
+            onClick={() => onChangeView('depanneurs')}
           >
-            Tableau de bord
+            Dépanneurs
           </button>
           <button
-            className={`tab ${view === 'drivers' ? 'active' : ''}`}
-            onClick={() => onChangeView('drivers')}
+            className={`tab ${view === 'equipe' ? 'active' : ''}`}
+            onClick={() => onChangeView('equipe')}
           >
-            Depanneurs
+            Équipe & applicabilité
           </button>
         </nav>
       </div>
@@ -1397,16 +1588,55 @@ function getPublicToken() {
 function AdminApp() {
   const [authed, setAuthed] = useState(Boolean(getToken()))
   const [me, setMe] = useState(null)
-  const [view, setView] = useState('dashboard')
+  const [view, setView] = useState('depanneurs')
+  const [ficheId, setFicheId] = useState(null)
   const [docTypes, setDocTypes] = useState([])
   const [profils, setProfils] = useState([])
+  const [data, setData] = useState(null)
+  const [erreur, setErreur] = useState('')
+  const [syncStatut, setSyncStatut] = useState(null)
+  const [syncEnCours, setSyncEnCours] = useState(false)
+  const [syncMessage, setSyncMessage] = useState('')
+  const [editDriver, setEditDriver] = useState(null)
+
+  // Le tableau de bord porte a la fois les types, les depanneurs et l'etat de
+  // chaque document : la liste et la fiche s'en servent toutes les deux, on le
+  // charge donc ici plutot qu'une fois par vue.
+  const recharger = useCallback(() => {
+    api.dashboard().then((d) => { setData(d); setErreur('') })
+      .catch((e) => setErreur(e.detail || String(e)))
+    api.docTypes().then(setDocTypes).catch(() => {})
+  }, [])
 
   useEffect(() => {
     if (!authed) return
     api.me().then(setMe).catch(() => {})
-    api.docTypes().then(setDocTypes).catch(() => {})
     api.profils().then(setProfils).catch(() => {})
-  }, [authed])
+    api.sync.status().then(setSyncStatut).catch(() => setSyncStatut({ active: false }))
+    recharger()
+  }, [authed, recharger])
+
+  async function lancerSync() {
+    setSyncEnCours(true)
+    setSyncMessage('')
+    try {
+      const r = await api.sync.run()
+      const parts = []
+      if (r.crees) parts.push(`${r.crees} ajouté(s)`)
+      if (r.archives) parts.push(`${r.archives} archivé(s)`)
+      if (r.reactives) parts.push(`${r.reactives} réactivé(s)`)
+      setSyncMessage(
+        parts.length
+          ? `Synchronisation : ${parts.join(', ')} (${r.mis_a_jour} inchangé(s)).`
+          : `Déjà à jour — ${r.mis_a_jour} dépanneur(s) vérifié(s).`
+      )
+      recharger()
+    } catch (err) {
+      setSyncMessage(err.detail || 'Erreur de synchronisation')
+    } finally {
+      setSyncEnCours(false)
+    }
+  }
 
   function handleLogout() {
     clearToken()
@@ -1420,11 +1650,56 @@ function AdminApp() {
 
   return (
     <>
-      <NavBar view={view} onChangeView={setView} me={me} onLogout={handleLogout} />
+      <NavBar
+        view={view}
+        onChangeView={(v) => { setView(v); setFicheId(null) }}
+        me={me}
+        onLogout={handleLogout}
+      />
       <main className="dashboard">
-        {view === 'dashboard' && <DashboardView docTypes={docTypes} />}
-        {view === 'drivers' && <DriversView docTypes={docTypes} profils={profils} />}
+        {erreur && <div className="error">{erreur}</div>}
+        {syncMessage && <div className="bandeau-info">{syncMessage}</div>}
+
+        {view === 'depanneurs' && !ficheId && (
+          <DriversListView
+            docTypes={docTypes}
+            data={data}
+            rafraichir={recharger}
+            onOuvrirFiche={setFicheId}
+            onSync={lancerSync}
+            syncStatut={syncStatut}
+            syncEnCours={syncEnCours}
+          />
+        )}
+        {view === 'depanneurs' && ficheId && (
+          <DriverSheetView
+            driverId={ficheId}
+            docTypes={docTypes}
+            data={data}
+            rafraichir={recharger}
+            onRetour={() => setFicheId(null)}
+            onModifier={setEditDriver}
+          />
+        )}
+        {view === 'equipe' && (
+          <DriversView
+            docTypes={docTypes}
+            profils={profils}
+            syncStatut={syncStatut}
+            onApresModification={recharger}
+          />
+        )}
       </main>
+
+      {editDriver && (
+        <DriverFormModal
+          driver={editDriver}
+          docTypes={docTypes}
+          profils={profils}
+          onClose={() => setEditDriver(null)}
+          onSaved={() => { setEditDriver(null); recharger() }}
+        />
+      )}
     </>
   )
 }

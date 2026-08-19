@@ -27,6 +27,14 @@ class Settings(BaseSettings):
     # l'endpoint est desactive (503).
     pilotage_secret: str = ""
 
+    # ---- Synchronisation de l'equipe depuis DepanTime ----
+    # DepanTime est la source de verite des fiches depanneurs : la liste d'ici
+    # en decoule. Si l'URL ou le secret est vide, la synchro est desactivee et
+    # la liste se gere a la main comme avant.
+    depantime_base_url: str = "https://depantime.alex-worksmart.com"
+    depantime_secret: str = ""
+    depantime_timeout_seconds: int = 20
+
     # Base URL du frontend, utilisee pour construire les magic_link
     # dans les emails de relance (n8n appelle l'API mais le mail doit
     # pointer vers le frontend).
@@ -63,6 +71,10 @@ class Settings(BaseSettings):
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    @property
+    def depantime_sync_enabled(self) -> bool:
+        return bool(self.depantime_base_url and self.depantime_secret)
 
     @property
     def docusign_private_key_pem(self) -> str:

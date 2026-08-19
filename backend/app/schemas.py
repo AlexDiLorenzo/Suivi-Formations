@@ -35,7 +35,8 @@ class TotpEnableRequest(BaseModel):
 
 
 class DriverCreate(BaseModel):
-    prenom: str
+    # Au depannage, beaucoup de fiches ne portent qu'un patronyme.
+    prenom: str | None = None
     nom: str
     email: EmailStr | None = None
     telephone: str | None = None
@@ -58,7 +59,7 @@ class DriverUpdate(BaseModel):
 class DriverOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: UUID
-    prenom: str
+    prenom: str | None
     nom: str
     email: EmailStr | None
     telephone: str | None
@@ -85,9 +86,13 @@ class DocumentTypeOut(BaseModel):
     duree_validite_jours_default: int | None
     categorie: str | None
     est_perimable: bool
-    criticite: str
+    niveau_exigence: str
     mode_acquisition: str
     display_order: int
+
+
+class DocumentTypeUpdate(BaseModel):
+    niveau_exigence: str | None = None
 
 
 class ProfilOut(BaseModel):
@@ -137,10 +142,11 @@ class DashboardCell(BaseModel):
 
 class DashboardDriver(BaseModel):
     id: UUID
-    prenom: str
+    prenom: str | None = None
     nom: str
     statut: str
     email: str | None = None
+    profil: str | None = None
     cells: list[DashboardCell]
     score: int | None = None
 
@@ -150,7 +156,10 @@ class DashboardDocType(BaseModel):
     id: UUID
     code: str
     libelle: str
+    categorie: str | None = None
+    niveau_exigence: str
     est_perimable: bool
+    duree_validite_jours_default: int | None = None
     display_order: int
 
 
@@ -258,6 +267,19 @@ class SkippedReminderItem(BaseModel):
 class DueRemindersResponse(BaseModel):
     items: list[DueReminderItem]
     skipped: list[SkippedReminderItem]
+
+
+class SyncStatusOut(BaseModel):
+    active: bool
+    source: str | None = None
+
+
+class SyncResultOut(BaseModel):
+    crees: int
+    mis_a_jour: int
+    archives: int
+    reactives: int
+    ignores: list[str] = Field(default_factory=list)
 
 
 class DocusignSendRequest(BaseModel):

@@ -1,4 +1,6 @@
+import io
 import unicodedata
+import zipfile
 from datetime import date, datetime, timezone
 from typing import Annotated
 from uuid import UUID
@@ -17,6 +19,7 @@ from app.models import (
     DocumentVersionStatus,
     Driver,
     DriverRequiredDocument,
+    DriverStatus,
     UploadedBy,
 )
 from app.schemas import DocumentVersionOut, RejectionRequest
@@ -130,14 +133,6 @@ async def upload_document(
     return version
 
 
-@router.get("/{version_id}", response_model=DocumentVersionOut)
-def get_version(version_id: UUID, db: Annotated[Session, Depends(get_db)]):
-    version = db.get(DocumentVersion, version_id)
-    if not version:
-        raise HTTPException(status_code=404, detail="Version introuvable")
-    return version
-
-
 def _slug(text: str) -> str:
     """Majuscules, sans accents, alphanumerique uniquement (sain pour un nom de fichier)."""
     decomposed = unicodedata.normalize("NFKD", text or "")
@@ -150,12 +145,93 @@ def _download_filename(version: DocumentVersion, doc_type: DocumentType, driver:
 
     La date est la peremption si le document est perimable, sinon l'emission.
     """
-    parts = [doc_type.code, _slug(driver.nom), _slug(driver.prenom)]
+    parts = [doc_type.code, _slug(driver.nom), _slug(driver.prenom or "")]
     ref_date = version.date_peremption or version.date_emission
     if ref_date:
         parts.append(ref_date.strftime("%d.%m.%Y"))
     base = "_".join(p for p in parts if p)
     return f"{base}.pdf"
+
+
+def _dossier_depanneur(driver: Driver) -> str:
+    return "_".join(p for p in (_slug(driver.nom), _slug(driver.prenom or "")) if p) or "SANS_NOM"
+
+
+# Declaree AVANT /{version_id} : sinon FastAPI tenterait de lire "export"
+# comme un UUID et repondrait 422.
+@router.get("/export")
+def export_documents(
+    db: Annotated[Session, Depends(get_db)],
+    driver_id: UUID | None = None,
+):
+    """Archive ZIP des documents en cours de validite.
+
+    Sans `driver_id`, l'export couvre tous les depanneurs actifs, un dossier
+    par depanneur. Seules les versions courantes validees sont reprises : c'est
+    le dossier « a jour » qu'on veut remettre, pas l'historique des versions.
+    """
+    query = (
+        db.query(Document, DocumentVersion, DocumentType, Driver)
+        .join(DocumentVersion, Document.current_version_id == DocumentVersion.id)
+        .join(DocumentType, Document.document_type_id == DocumentType.id)
+        .join(Driver, Document.driver_id == Driver.id)
+        .filter(DocumentVersion.statut == DocumentVersionStatus.VALIDATED.value)
+    )
+    if driver_id is not None:
+        driver = db.get(Driver, driver_id)
+        if not driver:
+            raise HTTPException(status_code=404, detail="Depanneur introuvable")
+        query = query.filter(Document.driver_id == driver_id)
+    else:
+        query = query.filter(Driver.statut == DriverStatus.ACTIVE.value)
+
+    lignes = query.order_by(Driver.nom, Driver.prenom, DocumentType.display_order).all()
+    if not lignes:
+        raise HTTPException(status_code=404, detail="Aucun document a exporter")
+
+    tampon = io.BytesIO()
+    illisibles: list[str] = []
+    # ZIP_STORED : les PDF sont deja compresses, deflater couterait du CPU pour
+    # quelques pourcents.
+    with zipfile.ZipFile(tampon, "w", zipfile.ZIP_STORED) as archive:
+        for _document, version, doc_type, driver in lignes:
+            try:
+                contenu = decrypt_and_read(version.file_path_encrypted)
+            except StorageError as exc:
+                # Un fichier illisible ne doit pas faire echouer tout l'export :
+                # on livre le reste et on signale le manque dans l'archive.
+                illisibles.append(f"{_download_filename(version, doc_type, driver)} : {exc}")
+                continue
+            nom = _download_filename(version, doc_type, driver)
+            if driver_id is None:
+                nom = f"{_dossier_depanneur(driver)}/{nom}"
+            archive.writestr(nom, contenu)
+        if illisibles:
+            archive.writestr(
+                "DOCUMENTS_ILLISIBLES.txt",
+                "Ces documents n'ont pas pu etre dechiffres :\n\n" + "\n".join(illisibles),
+            )
+
+    horodatage = date.today().strftime("%Y-%m-%d")
+    if driver_id is not None:
+        base = _dossier_depanneur(lignes[0][3])
+        nom_archive = f"HABILITATIONS_{base}_{horodatage}.zip"
+    else:
+        nom_archive = f"HABILITATIONS_FLOTTE_{horodatage}.zip"
+
+    return Response(
+        content=tampon.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{nom_archive}"'},
+    )
+
+
+@router.get("/{version_id}", response_model=DocumentVersionOut)
+def get_version(version_id: UUID, db: Annotated[Session, Depends(get_db)]):
+    version = db.get(DocumentVersion, version_id)
+    if not version:
+        raise HTTPException(status_code=404, detail="Version introuvable")
+    return version
 
 
 @router.get("/{version_id}/download")

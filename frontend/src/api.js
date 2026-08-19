@@ -74,7 +74,7 @@ async function uploadFormData(path, formData, { auth = true } = {}) {
   return data
 }
 
-async function fetchDownload(path) {
+async function fetchDownload(path, { fallbackName = 'document.pdf' } = {}) {
   const token = getToken()
   const res = await fetch(`/api${path}`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -94,7 +94,7 @@ async function fetchDownload(path) {
   // Nom de fichier propre fourni par le backend (Content-Disposition).
   const cd = res.headers.get('Content-Disposition') || ''
   const match = cd.match(/filename="?([^"]+)"?/i)
-  return { blob, filename: match ? match[1] : 'document.pdf' }
+  return { blob, filename: match ? match[1] : fallbackName }
 }
 
 function triggerBlobDownload(blob, filename) {
@@ -114,7 +114,13 @@ export const api = {
   me: () => request('/auth/me'),
   dashboard: () => request('/dashboard'),
   docTypes: () => request('/document-types'),
+  updateDocType: (id, payload) =>
+    request(`/document-types/${id}`, { method: 'PATCH', body: payload }),
   profils: () => request('/profils'),
+  sync: {
+    status: () => request('/sync/depantime'),
+    run: () => request('/sync/depantime', { method: 'POST' }),
+  },
   drivers: {
     list: ({ includeArchived = false } = {}) =>
       request(`/drivers?include_archived=${includeArchived}`),
@@ -142,23 +148,28 @@ export const api = {
       const { blob, filename } = await fetchDownload(`/documents/${versionId}/download`)
       triggerBlobDownload(blob, filename)
     },
+    // L'API exige le JWT : un <iframe src> ou un window.open sur l'URL ne peut
+    // pas fonctionner. On recupere le blob et on visualise l'URL objet.
+    openBlob: async (versionId) => {
+      const { blob, filename } = await fetchDownload(`/documents/${versionId}/download`)
+      return { url: URL.createObjectURL(blob), filename, type: blob.type, size: blob.size }
+    },
+    exportZip: async ({ driverId } = {}) => {
+      const query = driverId ? `?driver_id=${encodeURIComponent(driverId)}` : ''
+      const { blob, filename } = await fetchDownload(`/documents/export${query}`, {
+        fallbackName: 'habilitations.zip',
+      })
+      triggerBlobDownload(blob, filename)
+      return blob.size
+    },
     validate: (versionId) =>
       request(`/documents/${versionId}/validate`, { method: 'POST' }),
     reject: (versionId, reason) =>
       request(`/documents/${versionId}/reject`, { method: 'POST', body: { reason } }),
   },
-  documentRequests: {
-    create: ({ driverId, documentTypeId }) =>
-      request('/document-requests', {
-        method: 'POST',
-        body: { driver_id: driverId, document_type_id: documentTypeId },
-      }),
-    bulk: (driverId) =>
-      request('/document-requests/bulk', {
-        method: 'POST',
-        body: { driver_id: driverId },
-      }),
-  },
+  // Les demandes par magic link ne sont plus proposees dans l'interface (retire
+  // le 2026-08-19). Les routes backend restent en place : la relance passera
+  // par un mail automatique des documents manquants, a cadrer.
   docusign: {
     getEnvelope: (driverId, documentTypeId) =>
       request(`/docusign/envelope?driver_id=${driverId}&document_type_id=${documentTypeId}`),

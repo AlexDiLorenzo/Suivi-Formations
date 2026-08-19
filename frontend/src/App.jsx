@@ -103,11 +103,52 @@ function LoginView({ onLogin }) {
     }
   }
 
+  // Gabarit commun a toutes les applications :
+  // PLATEFORME_APPLICATIONS/brand/patterns/ecran-connexion.jsx
+  const T = {
+    fond: '#F1EFE8', carte: '#fff', bord: '#D3D1C7', encre: '#1A190F',
+    gris: '#888780', grisFonce: '#5F5E5A', vert: '#2C6126',
+    jaune: '#E4E13C', rouge: '#A32D2D',
+    titre: "'Space Mono', monospace", corps: "'DM Sans', sans-serif",
+  }
+  const styleChamp = {
+    width: '100%', padding: '10px 12px', borderRadius: 8,
+    border: `1px solid ${T.bord}`, fontSize: 14, fontFamily: T.corps,
+    margin: '6px 0 12px', boxSizing: 'border-box',
+  }
+  const styleLabel = {
+    fontSize: 10, fontWeight: 700, color: T.gris,
+    textTransform: 'uppercase', letterSpacing: '0.07em',
+  }
+
   return (
-    <div className="login-shell">
-      <form className="login-card" onSubmit={handleSubmit}>
-        <h1>Habilitations</h1>
-        <p className="subtitle">Espace administrateur — 1MDP</p>
+    <div style={{
+      minHeight: '100vh', display: 'flex', alignItems: 'center',
+      justifyContent: 'center', background: T.fond,
+      fontFamily: T.corps, padding: 20,
+    }}>
+      <form onSubmit={handleSubmit} style={{
+        background: T.carte, borderRadius: 12, padding: 36,
+        width: 360, maxWidth: '100%', border: `1px solid ${T.bord}`,
+        boxShadow: '0 10px 40px rgba(26,25,15,0.15)',
+      }}>
+        <div style={{
+          display: 'flex', flexDirection: 'column', alignItems: 'center',
+          gap: 12, marginBottom: 24,
+        }}>
+          <img src="/logo.png" alt="Montpellier Depannage"
+               style={{ width: 168, maxWidth: '100%', height: 'auto' }} />
+          <div style={{ textAlign: 'center' }}>
+            <div style={{
+              fontSize: 22, fontWeight: 700, fontFamily: T.titre,
+              color: T.encre, letterSpacing: '-0.02em',
+            }}>Habilitation</div>
+            <div style={{
+              fontSize: 10, color: T.gris, textTransform: 'uppercase',
+              letterSpacing: '0.1em', fontWeight: 700,
+            }}>Formations et conformité</div>
+          </div>
+        </div>
         <div className="field">
           <label htmlFor="login-email">Email</label>
           <input
@@ -130,10 +171,23 @@ function LoginView({ onLogin }) {
             required
           />
         </div>
-        {error && <div className="error">{error}</div>}
-        <button className="btn" type="submit" disabled={loading}>
+        {error && <p style={{ color: T.rouge, fontSize: 12, marginBottom: 12 }}>{error}</p>}
+        <button type="submit" disabled={loading} style={{
+          width: '100%', padding: '12px 0', borderRadius: 8, border: 'none',
+          background: T.vert, color: '#fff', fontWeight: 700, fontSize: 14,
+          fontFamily: T.corps, cursor: loading ? 'wait' : 'pointer',
+          boxShadow: '0 4px 14px rgba(44,97,38,0.30)',
+        }}>
           {loading ? 'Connexion…' : 'Se connecter'}
         </button>
+
+        <div style={{
+          marginTop: 18, padding: '8px 12px', background: T.jaune,
+          borderRadius: 6, fontSize: 11, color: T.encre, fontWeight: 700,
+          textAlign: 'center',
+        }}>
+          24 / 7 &middot; DEPANNAGE MONTPELLIER
+        </div>
       </form>
     </div>
   )

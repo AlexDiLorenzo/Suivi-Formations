@@ -23,6 +23,10 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    # Tout /srv/habilitation/.env est transmis : ajouter un compte ne demande
+    # pas de modifier ce fichier, seulement app/comptes.py et le .env.
+    env_file:
+      - .env
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       JWT_SECRET: ${JWT_SECRET}

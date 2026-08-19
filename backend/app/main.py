@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.comptes import amorcer_comptes
 from app.config import get_settings
 from app.routers import (
     auth,
@@ -29,6 +30,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+def _amorcage():
+    """Applique les comptes déclarés dans app/comptes.py.
+
+    Les migrations Alembic tournent avant le lancement d'uvicorn (voir la
+    commande du compose), la table admin_users existe donc déjà ici.
+    """
+    amorcer_comptes()
 
 
 @app.get("/api/health", tags=["meta"])

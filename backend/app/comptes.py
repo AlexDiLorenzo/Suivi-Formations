@@ -25,6 +25,7 @@ COMPTES = [
     ("alexandre.dilorenzo.pro@gmail.com", "Alexandre", "HB_PASS_ALEXANDRE"),
     ("norbert.dilorenzo@montpellierdepannage.com", "Norbert", "HB_PASS_NORBERT"),
     ("sandrine@montpellierdepannage.com", "Sandrine", "HB_PASS_SANDRINE"),
+    ("compta@montpellierdepannage.com", "Marie", "HB_PASS_MARIE"),
 ]
 
 

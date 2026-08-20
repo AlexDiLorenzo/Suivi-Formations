@@ -1,21 +1,25 @@
-"""Synchronisation de la liste des depanneurs depuis DepanTime.
+"""Synchronisation de la liste des depanneurs depuis DepanTime et Flotte.
 
-DepanTime tient les fiches de l'equipe ; cette application n'en est qu'un
-consommateur. Un depanneur ajoute la-bas apparait ici, un depanneur archive
-la-bas est archive ici. L'inverse n'est jamais vrai : rien n'est renvoye vers
-DepanTime.
+L'equipe est repartie entre deux applications et aucune ne la connait en
+entier : DepanTime tient les societes suivies au releve de temps (site `mtp`),
+Flotte tient l'equipe de Perols (sa feuille de presence). La liste d'ici est
+l'union des deux ; cette application n'est qu'un consommateur. Un depanneur
+ajoute la-bas apparait ici, un depanneur archive la-bas est archive ici.
+L'inverse n'est jamais vrai : rien n'est renvoye vers les sources.
 
 Ce qui appartient a DepanTime (ecrase a chaque passage) : nom, prenom, email,
 date d'entree, statut actif/archive.
 Ce qui appartient a HABILITATION (jamais touche par la synchro) : le profil de
 permis, l'applicabilite des documents, et bien sur les documents eux-memes.
 
-L'alignement est strict : une fiche absente de DepanTime n'a rien a faire dans
-la liste, meme si elle a ete creee ici avant que la synchro existe. Deux sorts,
-selon ce qu'elle porte :
-  - elle detient des documents  -> archivee, jamais supprimee (les pieces de
-    conformite doivent rester consultables apres le depart) ;
-  - elle n'en detient aucun     -> supprimee, il n'y a rien a conserver.
+L'alignement est strict : une fiche absente des deux sources est **supprimee**,
+avec ses documents (decision de l'exploitant, 2026-08-20). Ce n'est pas aussi
+brutal qu'il y parait cote DepanTime, qui archive les partants au lieu de les
+effacer : ne disparaissent vraiment que les fiches erronees ou de test.
+
+Attention en revanche cote Perols : `presence_drivers` n'a pas de notion
+d'archive, retirer quelqu'un de l'equipe efface sa ligne. Un depanneur de
+Perols qui s'en va emporte donc ses pieces avec lui a la synchro suivante.
 """
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
@@ -70,36 +74,53 @@ def _parse_date(value: str | None) -> date | None:
     return None
 
 
-def recuperer_depanneurs() -> list[dict]:
+def _lire_source(nom: str, base_url: str, secret: str) -> list[dict]:
+    """Interroge une source et renvoie sa liste de depanneurs."""
     settings = get_settings()
-    if not settings.depantime_sync_enabled:
-        raise SyncError(
-            "Synchronisation desactivee : renseigne DEPANTIME_BASE_URL et DEPANTIME_SECRET."
-        )
-    url = f"{settings.depantime_base_url.rstrip('/')}/api/habilitation-public/depanneurs"
+    url = f"{base_url.rstrip('/')}/api/habilitation-public/depanneurs"
     try:
         response = httpx.get(
             url,
-            headers={"Authorization": f"Bearer {settings.depantime_secret}"},
+            headers={"Authorization": f"Bearer {secret}"},
             timeout=settings.depantime_timeout_seconds,
         )
     except httpx.HTTPError as exc:
-        raise SyncError(f"DepanTime injoignable : {exc}") from exc
+        raise SyncError(f"{nom} injoignable : {exc}") from exc
 
     if response.status_code == 401:
-        raise SyncError("DepanTime a refuse le secret partage (401).")
+        raise SyncError(f"{nom} a refuse le secret partage (401).")
     if response.status_code != 200:
-        raise SyncError(f"DepanTime a repondu {response.status_code}.")
+        raise SyncError(f"{nom} a repondu {response.status_code}.")
 
     try:
         payload = response.json()
     except ValueError as exc:
-        raise SyncError("Reponse de DepanTime illisible (JSON invalide).") from exc
+        raise SyncError(f"Reponse de {nom} illisible (JSON invalide).") from exc
 
     depanneurs = payload.get("depanneurs")
     if not isinstance(depanneurs, list):
-        raise SyncError("Reponse de DepanTime inattendue : cle 'depanneurs' absente.")
+        raise SyncError(f"Reponse de {nom} inattendue : cle 'depanneurs' absente.")
     return depanneurs
+
+
+def recuperer_depanneurs() -> list[dict]:
+    """Union des deux sources. Aucune ne connait l'equipe en entier.
+
+    Si l'une des deux repond mal on echoue franchement, sans rien ecrire : une
+    source muette ferait passer toute son equipe pour disparue, donc supprimee.
+    """
+    settings = get_settings()
+    if not settings.sync_enabled:
+        raise SyncError(
+            "Synchronisation desactivee : renseigne DEPANTIME_SECRET et/ou FLOTTE_SECRET."
+        )
+
+    tout: list[dict] = []
+    if settings.depantime_sync_enabled:
+        tout += _lire_source("DepanTime", settings.depantime_base_url, settings.depantime_secret)
+    if settings.flotte_sync_enabled:
+        tout += _lire_source("Flotte", settings.flotte_base_url, settings.flotte_secret)
+    return tout
 
 
 def _appliquer_socle(db: Session, driver: Driver) -> None:
@@ -191,31 +212,20 @@ def synchroniser(db: Session) -> SyncResult:
         else:
             resultat.mis_a_jour += 1
 
-    # Tout ce qui n'est pas dans DepanTime : fiches disparues de la-bas, et
-    # fiches creees ici a la main avant que la synchro existe (cle nulle).
+    # Tout ce qui n'est presente dans aucune des deux sources : fiches effacees
+    # la-bas, et fiches creees ici a la main avant que la synchro existe.
     for driver in db.query(Driver).all():
         if driver.external_id_depantime and driver.external_id_depantime in vus:
             continue
 
         nom = f"{driver.nom} {driver.prenom or ''}".strip()
-        possede_des_pieces = (
-            db.query(Document).filter(Document.driver_id == driver.id).count() > 0
-        )
-        if possede_des_pieces:
-            if driver.statut == DriverStatus.ACTIVE.value:
-                driver.statut = DriverStatus.ARCHIVED.value
-                if not driver.date_sortie:
-                    driver.date_sortie = date.today()
-                driver.last_sync_at = now
-                resultat.archives += 1
-                resultat.hors_depantime.append(f"{nom} : archive (documents conserves)")
-            continue
-
-        # Aucune piece : la fiche ne porte rien, on l'efface pour que la liste
-        # reste le reflet exact de DepanTime.
+        pieces = db.query(Document).filter(Document.driver_id == driver.id).count()
         db.delete(driver)
         resultat.supprimes += 1
-        resultat.hors_depantime.append(f"{nom} : supprime (aucun document)")
+        resultat.hors_depantime.append(
+            f"{nom} : supprime"
+            + (f" avec {pieces} document(s)" if pieces else " (aucun document)")
+        )
 
     db.commit()
     return resultat

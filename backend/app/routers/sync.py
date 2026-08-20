@@ -39,9 +39,14 @@ def executer(db: Session) -> SyncResultOut:
 @router.get("/depantime", response_model=SyncStatusOut)
 def statut_sync():
     settings = get_settings()
+    sources = []
+    if settings.depantime_sync_enabled:
+        sources.append("DepanTime")
+    if settings.flotte_sync_enabled:
+        sources.append("Flotte (Pérols)")
     return SyncStatusOut(
-        active=settings.depantime_sync_enabled,
-        source=settings.depantime_base_url if settings.depantime_sync_enabled else None,
+        active=settings.sync_enabled,
+        source=" + ".join(sources) or None,
     )
 
 

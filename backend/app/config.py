@@ -27,12 +27,16 @@ class Settings(BaseSettings):
     # l'endpoint est desactive (503).
     pilotage_secret: str = ""
 
-    # ---- Synchronisation de l'equipe depuis DepanTime ----
-    # DepanTime est la source de verite des fiches depanneurs : la liste d'ici
-    # en decoule. Si l'URL ou le secret est vide, la synchro est desactivee et
-    # la liste se gere a la main comme avant.
+    # ---- Synchronisation de l'equipe : deux sources ----
+    # L'equipe est repartie entre deux applications, et aucune ne la connait en
+    # entier : DepanTime tient les societes suivies au releve de temps, Flotte
+    # tient l'equipe de Perols (feuille de presence). La liste d'ici est l'union
+    # des deux. Une source dont l'URL ou le secret est vide est simplement
+    # ignoree — utile pour n'en brancher qu'une.
     depantime_base_url: str = "https://depantime.alex-worksmart.com"
     depantime_secret: str = ""
+    flotte_base_url: str = "https://flotte.alex-worksmart.com"
+    flotte_secret: str = ""
     depantime_timeout_seconds: int = 20
 
     # Base URL du frontend, utilisee pour construire les magic_link
@@ -75,6 +79,14 @@ class Settings(BaseSettings):
     @property
     def depantime_sync_enabled(self) -> bool:
         return bool(self.depantime_base_url and self.depantime_secret)
+
+    @property
+    def flotte_sync_enabled(self) -> bool:
+        return bool(self.flotte_base_url and self.flotte_secret)
+
+    @property
+    def sync_enabled(self) -> bool:
+        return self.depantime_sync_enabled or self.flotte_sync_enabled
 
     @property
     def docusign_private_key_pem(self) -> str:

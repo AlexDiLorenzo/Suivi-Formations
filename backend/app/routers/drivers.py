@@ -24,6 +24,7 @@ from app.models import (
     DriverStatus,
 )
 from app.schemas import DriverOut, DriverUpdate, RequirementsSync
+from app.socle import ids_du_socle
 
 
 router = APIRouter(dependencies=[Depends(get_current_admin)])
@@ -124,6 +125,11 @@ def sync_requirements(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Au moins un type de document est inconnu",
             )
+
+    # Le socle s'impose : seules les habilitations se cochent. On le reajoute
+    # ici quoi qu'envoie le client — sans quoi un decochage passerait, pour
+    # etre defait a la synchro suivante, ce qui serait incomprehensible.
+    target |= ids_du_socle(db)
 
     existing = (
         db.query(DriverRequiredDocument)

@@ -35,7 +35,7 @@ from app.models import (
     DriverRequiredDocument,
     DriverStatus,
 )
-from app.profils import DOCUMENTS_PAR_DEFAUT
+from app.socle import appliquer_socle
 
 
 class SyncError(RuntimeError):
@@ -49,6 +49,7 @@ class SyncResult:
     archives: int = 0
     reactives: int = 0
     supprimes: int = 0
+    socle_poses: int = 0
     ignores: list[str] = field(default_factory=list)
     hors_depantime: list[str] = field(default_factory=list)
 
@@ -123,19 +124,15 @@ def recuperer_depanneurs() -> list[dict]:
     return tout
 
 
-def _appliquer_socle(db: Session, driver: Driver) -> None:
-    """Pose le socle de documents attendus sur un depanneur qui vient d'arriver.
+def _appliquer_socle(db: Session, driver: Driver) -> int:
+    """Pose le socle sur un depanneur (cf. app/socle.py).
 
-    Sans cela un nouveau depanneur s'afficherait 100 % conforme, faute de
-    document applicable — exactement l'inverse du signal recherche.
+    Applique a **tout le monde** a chaque passage, pas seulement aux arrivants :
+    les fiches anterieures a la synchro (import CSV du 15/05) n'avaient aucun
+    document requis et s'affichaient donc entierement grises, sans rien a
+    fournir — exactement l'inverse du signal recherche.
     """
-    types = (
-        db.query(DocumentType)
-        .filter(DocumentType.code.in_(DOCUMENTS_PAR_DEFAUT))
-        .all()
-    )
-    for doc_type in types:
-        db.add(DriverRequiredDocument(driver_id=driver.id, document_type_id=doc_type.id))
+    return appliquer_socle(db, driver.id)
 
 
 def _driver_existant(db: Session, site_id: str, employee_id: str) -> Driver | None:
@@ -187,9 +184,13 @@ def synchroniser(db: Session) -> SyncResult:
             )
             db.add(driver)
             db.flush()
-            _appliquer_socle(db, driver)
+            resultat.socle_poses += _appliquer_socle(db, driver)
             resultat.crees += 1
             continue
+
+        # Le socle est (re)pose a chaque passage : c'est ce qui rattrape les
+        # fiches anterieures a la synchro, restees sans aucun document requis.
+        resultat.socle_poses += _appliquer_socle(db, driver)
 
         driver.nom = nom
         driver.prenom = prenom

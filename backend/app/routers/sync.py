@@ -31,6 +31,7 @@ def executer(db: Session) -> SyncResultOut:
         archives=resultat.archives,
         reactives=resultat.reactives,
         supprimes=resultat.supprimes,
+        socle_poses=resultat.socle_poses,
         ignores=resultat.ignores,
         hors_depantime=resultat.hors_depantime,
     )

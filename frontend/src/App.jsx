@@ -62,6 +62,10 @@ const NIVEAU_AIDE = {
 // Seul le socle est deplie d'entree : c'est ce qu'on vient verifier en premier.
 const NIVEAU_OUVERT_PAR_DEFAUT = { obligatoire: true, profil: true, complementaire: false }
 
+// Le seul niveau qui se coche au cas par cas ; le reste est impose par le code
+// (cf. backend/app/socle.py). Doit rester aligne sur NIVEAU_A_COCHER cote API.
+const NIVEAU_A_COCHER = 'profil'
+
 function formatDateFr(iso) {
   if (!iso) return ''
   const [y, m, d] = iso.split('-')
@@ -477,7 +481,7 @@ function DriversListView({ docTypes, onOuvrirFiche, rafraichir, data, onSync, sy
 // Fiche d'un dépanneur
 // =====================================================================
 
-function LigneDocument({ docType, cell, onDeposer, onVoir, reglage, onChangerNiveau }) {
+function LigneDocument({ docType, cell, onDeposer, onVoir }) {
   const [survol, setSurvol] = useState(false)
   const absent = cell.status === 'red'
   const perime = absent && cell.reason === 'expired'
@@ -521,31 +525,17 @@ function LigneDocument({ docType, cell, onDeposer, onVoir, reglage, onChangerNiv
         {cell.has_pending_version && <span className="tag tag-pending">à valider</span>}
       </span>
 
-      {reglage ? (
-        <span className="doc-actions">
-          <select
-            value={docType.niveau_exigence}
-            onChange={(e) => onChangerNiveau(docType, e.target.value)}
-            title="Niveau d'exigence de ce document"
-          >
-            {NIVEAU_ORDER.map((n) => (
-              <option key={n} value={n}>{NIVEAU_LABEL[n]}</option>
-            ))}
-          </select>
-        </span>
-      ) : (
-        <span className="doc-actions">
+      <span className="doc-actions">
           {cell.current_version_id && (
             <button type="button" className="btn btn-ghost btn-sm"
               onClick={() => onVoir(cell.current_version_id)} title="Voir le document">
               Voir
             </button>
           )}
-          <button type="button" className="btn btn-ghost btn-sm" onClick={() => onDeposer(null)}>
-            {cell.current_version_id ? 'Remplacer' : 'Déposer'}
-          </button>
-        </span>
-      )}
+        <button type="button" className="btn btn-ghost btn-sm" onClick={() => onDeposer(null)}>
+          {cell.current_version_id ? 'Remplacer' : 'Déposer'}
+        </button>
+      </span>
     </div>
   )
 }
@@ -555,7 +545,6 @@ function DriverSheetView({ driverId, docTypes, data, onRetour, rafraichir, onMod
   const [upload, setUpload] = useState(null)   // { docType, cell, fichier }
   const [apercu, setApercu] = useState(null)   // { versionId, titre }
   const [exportEnCours, setExportEnCours] = useState(false)
-  const [reglage, setReglage] = useState(false)
   const [message, setMessage] = useState('')
 
   const driver = data?.drivers.find((d) => d.id === driverId)
@@ -570,16 +559,6 @@ function DriverSheetView({ driverId, docTypes, data, onRetour, rafraichir, onMod
       setMessage(err.detail || 'Erreur lors de l\'export')
     } finally {
       setExportEnCours(false)
-    }
-  }
-
-  async function changerNiveau(docType, niveau) {
-    setMessage('')
-    try {
-      await api.updateDocType(docType.id, { niveau_exigence: niveau })
-      rafraichir()
-    } catch (err) {
-      setMessage(err.detail || 'Erreur lors du changement de niveau')
     }
   }
 
@@ -640,13 +619,6 @@ function DriverSheetView({ driverId, docTypes, data, onRetour, rafraichir, onMod
             title="Archive ZIP des documents à jour, nommés proprement">
             {exportEnCours ? 'Préparation…' : '⬇ Dossier ZIP'}
           </button>
-          <button
-            className={`btn btn-ghost ${reglage ? 'actif' : ''}`}
-            onClick={() => setReglage((v) => !v)}
-            title="Régler quels documents sont obligatoires"
-          >
-            ⚙ Niveaux
-          </button>
         </div>
       </div>
 
@@ -660,12 +632,6 @@ function DriverSheetView({ driverId, docTypes, data, onRetour, rafraichir, onMod
       </div>
 
       {message && <div className="error">{message}</div>}
-      {reglage && (
-        <div className="bandeau-info">
-          Réglage des niveaux : ce choix vaut pour <strong>tous</strong> les dépanneurs, pas
-          seulement celui-ci.
-        </div>
-      )}
 
       {parNiveau.map(({ niveau, items, parCategorie, ok }) => (
         <section key={niveau} className={`bloc-niveau ${niveau}`}>
@@ -695,8 +661,6 @@ function DriverSheetView({ driverId, docTypes, data, onRetour, rafraichir, onMod
                       key={docType.id}
                       docType={docType}
                       cell={cell}
-                      reglage={reglage}
-                      onChangerNiveau={changerNiveau}
                       onVoir={(versionId) => setApercu({ versionId, titre: docType.libelle })}
                       onDeposer={(fichier) => setUpload({ docType, cell, fichier })}
                     />
@@ -1152,12 +1116,10 @@ function DriverProfilModal({ driver, docTypes, profils, onClose, onSaved }) {
     }
   }
 
-  const groupes = NIVEAU_ORDER.map((niveau) => ({
-    niveau,
-    items: docTypes
-      .filter((dt) => dt.niveau_exigence === niveau)
-      .sort((a, b) => a.display_order - b.display_order),
-  })).filter((g) => g.items.length > 0)
+  // Le socle est impose par le code ; seules les habilitations se cochent.
+  const parOrdre = (a, b) => a.display_order - b.display_order
+  const habilitations = docTypes.filter((dt) => dt.niveau_exigence === NIVEAU_A_COCHER).sort(parOrdre)
+  const socle = docTypes.filter((dt) => dt.niveau_exigence !== NIVEAU_A_COCHER).sort(parOrdre)
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -1199,32 +1161,47 @@ function DriverProfilModal({ driver, docTypes, profils, onClose, onSaved }) {
           </div>
 
           <div className="section">
-            <h3>Documents attendus de cette personne</h3>
+            <h3>Habilitations attendues de cette personne</h3>
             <p className="hint">
-              Les documents non cochés ne lui sont pas applicables : ils n'apparaissent
-              pas sur sa fiche et ne comptent pas dans son score.
+              Seules les habilitations se cochent : elles dépendent du permis et des
+              engins conduits. Une habilitation non cochée n'apparaît pas sur sa fiche
+              et ne compte pas dans son score.
             </p>
-            {groupes.map(({ niveau, items }) => (
-              <div key={niveau} className="check-group">
-                <h4>{NIVEAU_LABEL[niveau]}</h4>
-                <div className="checks">
-                  {items.map((dt) => (
-                    <label key={dt.id} className="check">
-                      <input
-                        type="checkbox"
-                        disabled={!applicableIds}
-                        checked={applicableIds ? applicableIds.has(dt.id) : false}
-                        onChange={() => toggleApplicable(dt.id)}
-                      />
-                      <span>
-                        {dt.libelle}
-                        <span className="doc-categorie">{CATEGORIE_LABEL[dt.categorie] || ''}</span>
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            ))}
+            <div className="checks">
+              {habilitations.map((dt) => (
+                <label key={dt.id} className="check">
+                  <input
+                    type="checkbox"
+                    disabled={!applicableIds}
+                    checked={applicableIds ? applicableIds.has(dt.id) : false}
+                    onChange={() => toggleApplicable(dt.id)}
+                  />
+                  <span>
+                    {dt.libelle}
+                    <span className="doc-categorie">{CATEGORIE_LABEL[dt.categorie] || ''}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="section">
+            <h3>Socle commun</h3>
+            <p className="hint">
+              Attendu de tout dépanneur, sans exception. Défini dans le code, identique
+              pour tout le monde — il n'y a rien à régler ici.
+            </p>
+            <div className="checks socle-fige">
+              {socle.map((dt) => (
+                <span key={dt.id} className="check">
+                  <input type="checkbox" checked readOnly disabled />
+                  <span>
+                    {dt.libelle}
+                    <span className="doc-categorie">{CATEGORIE_LABEL[dt.categorie] || ''}</span>
+                  </span>
+                </span>
+              ))}
+            </div>
           </div>
 
           {error && <div className="error">{error}</div>}

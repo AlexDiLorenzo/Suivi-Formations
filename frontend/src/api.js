@@ -114,8 +114,6 @@ export const api = {
   me: () => request('/auth/me'),
   dashboard: () => request('/dashboard'),
   docTypes: () => request('/document-types'),
-  updateDocType: (id, payload) =>
-    request(`/document-types/${id}`, { method: 'PATCH', body: payload }),
   profils: () => request('/profils'),
   sync: {
     status: () => request('/sync/depantime'),

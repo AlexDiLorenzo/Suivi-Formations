@@ -1259,3 +1259,9 @@ input[type="file"]::file-selector-button:hover {
   margin: 2px 0 0;
   font-size: 14px;
 }
+
+/* Socle imposé : présenté coché et inerte, sans donner l'illusion d'un réglage */
+.checks.socle-fige .check {
+  cursor: default;
+  opacity: 0.75;
+}

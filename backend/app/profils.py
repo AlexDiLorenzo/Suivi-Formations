@@ -1,40 +1,25 @@
-"""Mapping profil de permis -> codes de documents requis par defaut.
+"""Habilitations attendues selon le profil de permis.
 
-Sert au pre-remplissage de driver_required_documents quand l'admin choisit un
-profil pour un depanneur — et a l'initialisation d'un depanneur cree par la
-synchro DepanTime. L'admin peut ensuite ajuster manuellement, document par
-document : ce mapping n'est qu'un point de depart raisonnable.
+Le **socle** (identite, permis, contrat, RH...) est pose automatiquement sur
+tout le monde par `app/socle.py` : il n'a pas sa place ici. Ce mapping ne
+couvre que les **habilitations**, les seules a se cocher au cas par cas, et
+ne sert qu'a les pre-cocher quand l'admin choisit un profil. L'ajustement
+reste manuel ensuite.
+
+Les niveaux d'exigence eux-memes sont imposes par le seed des types
+(`scripts/seed_doctypes.py`), pas reglables depuis l'application.
 """
 from app.models import DriverProfil
 
 
-# Socle attendu de tout depanneur, quel que soit le profil de permis.
-# Aligne sur les types de niveau `obligatoire` du seed, plus les pieces RH
-# systematiquement reunies a l'embauche.
-_COMMUNS = [
-    "PERMIS",
-    "AUTORISATION_CONDUITE",
-    "FORMATION_INITIALE",
-    "PIECE_IDENTITE",
-    "CONTRAT_TRAVAIL",
-    "DPAE",
-    "JUSTIF_DOMICILE",
-    "RIB",
-    "MUTUELLE",
-]
-
-# B1VL est optionnel chez 1MDP (meme pour les permis C/CE) : volontairement
-# absent des pre-remplissages, l'admin le coche au cas par cas si besoin.
+# B1VL est optionnel chez 1MDP, meme pour les permis C/CE : volontairement
+# absent des pre-cochages, l'admin le coche au cas par cas si besoin.
 PROFIL_DOCUMENTS: dict[str, list[str]] = {
-    DriverProfil.PERMIS_C_CE.value: _COMMUNS + [
+    DriverProfil.PERMIS_C_CE.value: [
         "FIMO_FCO",
         "B2XL",
         "CACES_GRUE",
         "CACES_CHARIOT",
     ],
-    DriverProfil.PERMIS_B.value: list(_COMMUNS),
+    DriverProfil.PERMIS_B.value: [],
 }
-
-# Applique aux depanneurs crees par la synchro, dont le profil de permis n'est
-# pas connu : seulement le socle, l'admin precise le profil ensuite.
-DOCUMENTS_PAR_DEFAUT = list(_COMMUNS)

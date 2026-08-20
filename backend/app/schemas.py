@@ -82,9 +82,6 @@ class DocumentTypeOut(BaseModel):
     display_order: int
 
 
-class DocumentTypeUpdate(BaseModel):
-    niveau_exigence: str | None = None
-
 
 class ProfilOut(BaseModel):
     value: str
@@ -271,6 +268,7 @@ class SyncResultOut(BaseModel):
     archives: int
     reactives: int
     supprimes: int = 0
+    socle_poses: int = 0
     ignores: list[str] = Field(default_factory=list)
     hors_depantime: list[str] = Field(default_factory=list)
 

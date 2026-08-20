@@ -16,7 +16,7 @@ Module 1MDP de suivi des habilitations et documents des dépanneurs (permis, FCO
 - **18 types de documents** rangés sur **deux axes** (étape 12) :
   - `categorie` = la **famille**, qui dit qui détient le document : `conduite_permis`, `habilitations_caces`, `formations_internes` (les trois relèvent de l'exploitation) et `rh_administratif` (le RH — les diplômes y ont été rapatriés).
   - `niveau_exigence` = ce qu'on en attend : `obligatoire` (socle de tout dépanneur) / `profil` (selon le permis et les engins) / `complementaire`. Il **remplace** l'ancien `criticite` et porte à la fois le poids du score (3 / 2 / 1) et l'ordre d'affichage de la fiche.
-  - Le niveau est **réglable depuis l'application** (`PATCH /api/document-types/{id}`, bouton « ⚙ Niveaux » de la fiche) : la liste des documents exigés n'était pas arrêtée au moment de la refonte. `seed_doctypes.py` ne repose donc **pas** le niveau d'un type existant, sauf `--reset-niveaux`.
+  - Le niveau est **imposé par le code** et n'est **pas** réglable depuis l'application (décision 2026-08-20 ; `PATCH /api/document-types/{id}` et le bouton « ⚙ Niveaux » ont été retirés). Il se règle dans `scripts/seed_doctypes.py`, avec `--reset-niveaux` pour réappliquer.
   - Chaque `DocumentType` porte aussi `est_perimable` et `mode_acquisition` (upload/docusign). Seed dans `scripts/seed_doctypes.py`.
 - **Pièce d'identité** (`PIECE_IDENTITE`) : CNI **ou** passeport — c'est un justificatif d'identité qui est demandé, pas une pièce précise. Renommage en place de l'ancien `CNI` (migration 0004), pour ne pas détacher les documents déjà déposés.
 - **Écran d'accueil = la liste des dépanneurs** (étape 12) : une ligne par dépanneur avec son score, ses manques sur le socle, ses manquants / périmés / expirations sous 90 j. La matrice dépanneurs × 20 types a été retirée : illisible passé quelques dizaines de lignes.
@@ -29,7 +29,10 @@ Module 1MDP de suivi des habilitations et documents des dépanneurs (permis, FCO
   - **Rouge** : doc périmé OU applicable et jamais transmis
   - **Gris** : non applicable pour ce dépanneur
   - Documents **non-périmables** (RIB, CV, diplômes…) : pas de date → vert si validé, rouge si applicable et absent (jamais orange)
-- Applicabilité par dépanneur via `driver_required_documents`. Le champ `profil` du dépanneur (permis B / permis C-CE) pré-coche les documents par défaut via `app/profils.py` ; l'admin ajuste ensuite case par case.
+- **Socle vs habilitations** (`app/socle.py`, 2026-08-20) — la ligne de partage de toute l'applicabilité :
+  - **Socle** = tout ce qui n'est *pas* de niveau `profil`. Identique pour **tout le monde**, posé automatiquement par la synchro **à chaque passage** (pas seulement à la création : 11 fiches issues de l'import CSV du 15/05 n'avaient jamais reçu de socle et s'affichaient toutes grises). L'application est **additive** — elle ajoute ce qui manque, ne retire jamais rien.
+  - **Habilitations** = les types de niveau `profil` (FIMO/FCO, B2XL, B1VL, CACES). **Les seules à se cocher**, dans `DriverProfilModal` ; `app/profils.py` ne sert plus qu'à les pré-cocher selon le permis.
+  - `PUT /drivers/{id}/requirements` **réunit systématiquement le socle** à ce que le client envoie : décocher un document du socle passerait, pour être défait à la synchro suivante — incompréhensible côté utilisateur. L'invariant est tenu côté serveur, pas seulement par l'écran.
 - **Scoring** (étape 10c/10d) : score de conformité par dépanneur (0-100 %), pondéré `obligatoire` ×3 / `profil` ×2 / `complementaire` ×1 (`POIDS_NIVEAU` dans `models.py`), + taux global. Conforme = cellule **verte ou orange** (le doc est valide) ; rouge = non conforme ; gris exclu du calcul.
 - **Saisie des dates manuelle** (pas d'OCR — décision explicite, à reprendre plus tard)
 - Workflow validation : `pending` → `validated` / `rejected` par l'admin

@@ -379,8 +379,8 @@ function DriversListView({ docTypes, onOuvrirFiche, rafraichir, data, onSync, sy
         <div className="entete-actions">
           {syncStatut?.active && (
             <button className="btn btn-ghost" onClick={onSync} disabled={syncEnCours}
-              title="Aligner la liste sur l'équipe du dépannage dans DepanTime">
-              {syncEnCours ? 'Synchronisation…' : '⟳ Synchroniser DepanTime'}
+              title="Aligner la liste sur DepanTime (Montpellier) et Flotte (Pérols)">
+              {syncEnCours ? 'Synchronisation…' : '⟳ Synchroniser l’équipe'}
             </button>
           )}
           <button className="btn btn-ghost" onClick={exporterTout} disabled={exportEnCours}
@@ -1169,8 +1169,9 @@ function DriverProfilModal({ driver, docTypes, profils, onClose, onSaved }) {
 
         <div className="modal-body">
           <div className="bandeau-info">
-            L'identité et le statut de ce dépanneur viennent de <strong>DepanTime</strong> et
-            ne se modifient que là-bas. Ici, on règle ce qu'on exige de lui.
+            L'identité et le statut de ce dépanneur viennent de son application source —
+            <strong>DepanTime</strong> pour Montpellier, <strong>Flotte</strong> pour Pérols —
+            et ne se modifient que là-bas. Ici, on règle ce qu'on exige de lui.
           </div>
 
           <dl className="fiche-identite">
@@ -1271,9 +1272,10 @@ function DriversView({ docTypes, profils, syncStatut, onApresModification }) {
       </div>
 
       <div className="bandeau-info">
-        La liste est le reflet de l'équipe du dépannage tenue dans <strong>DepanTime</strong> :
-        ajouter, renommer ou archiver un dépanneur se fait là-bas, et rien d'autre.
-        Ici on règle seulement ce qu'on exige de chacun, et on dépose ses documents.
+        La liste est le reflet de deux sources : <strong>DepanTime</strong> pour les
+        sociétés suivies au relevé de temps, <strong>Flotte</strong> pour l'équipe de Pérols.
+        Ajouter, renommer ou archiver un dépanneur se fait là-bas, et rien d'autre. Ici on
+        règle seulement ce qu'on exige de chacun, et on dépose ses documents.
       </div>
 
       <div className="toolbar">

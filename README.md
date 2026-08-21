@@ -84,6 +84,9 @@ Front dispo sur http://localhost:5173. Vite proxie automatiquement `/api/*` vers
 - `GET /api/public/document-requests/{token}` — public : resout un magic link, renvoie le contexte (driver, type)
 - `POST /api/public/document-requests/{token}/upload` — public : upload du PDF par le depanneur, cree DocumentVersion pending
 - `GET /api/documents/{version_id}` — admin : details d'une version (uploaded_by, dates, statut, motif rejet, etc.)
+- `DELETE /api/documents/{version_id}` — admin : supprime une piece deposee par
+  erreur (fichier chiffre compris), trace dans `audit_log`. La version validee
+  precedente redevient courante ; s'il n'en reste aucune, le document disparait.
 - `POST /api/documents/{version_id}/validate` — admin : pending -> validated, devient current_version
 - `POST /api/documents/{version_id}/reject` body `{reason}` — admin : pending -> rejected (motif obligatoire)
 

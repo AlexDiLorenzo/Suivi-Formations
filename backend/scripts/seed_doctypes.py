@@ -63,14 +63,14 @@ SEEDS = [
     # ══ SOCLE — tout le monde ════════════════════════════════════════
     _t("PERMIS", "Permis de conduire", _C.CONDUITE_PERMIS,
        perimable=True, duree=15 * AN, niveau=_SOCLE, ordre=10),
-    _t("PIECE_IDENTITE", "Piece d'identite (CNI ou passeport)", _C.RH_ADMINISTRATIF,
+    _t("PIECE_IDENTITE", "Pièce d'identité (CNI ou passeport)", _C.RH_ADMINISTRATIF,
        perimable=True, duree=15 * AN, niveau=_SOCLE, ordre=20),
     # Un CDI produit un contrat de travail, un interimaire un contrat de mise a
     # disposition remis a jour a chaque mission : c'est le meme creneau du
     # dossier, deux types en feraient un rouge permanent chez chacun des deux.
-    _t("CONTRAT_TRAVAIL", "Contrat de travail ou de mise a disposition", _C.RH_ADMINISTRATIF,
+    _t("CONTRAT_TRAVAIL", "Contrat de travail ou de mise à disposition", _C.RH_ADMINISTRATIF,
        perimable=False, niveau=_SOCLE, ordre=30),
-    _t("DPAE", "DPAE (declaration prealable a l'embauche)", _C.RH_ADMINISTRATIF,
+    _t("DPAE", "DPAE (déclaration préalable à l'embauche)", _C.RH_ADMINISTRATIF,
        perimable=False, niveau=_SOCLE, ordre=40),
     _t("MUTUELLE", "Carte vitale / mutuelle", _C.RH_ADMINISTRATIF,
        perimable=False, niveau=_SOCLE, ordre=50),
@@ -85,7 +85,7 @@ SEEDS = [
     # La date se saisit au depot et l'alerte orange a 90 j fait le rappel.
     #
     # Le code reste `FORMATION_INITIALE` : il porte deja des pieces reelles.
-    _t("FORMATION_INITIALE", "Formation initiale 1MDP (depannage, vehicules electriques, securite)",
+    _t("FORMATION_INITIALE", "Formation initiale 1MDP (dépannage, véhicules électriques, sécurité)",
        _C.FORMATIONS_INTERNES, perimable=True, niveau=_SOCLE, ordre=60),
 
     # ══ SOCLE — equipe ASF ═══════════════════════════════════════════
@@ -112,16 +112,16 @@ SEEDS = [
     # formation : c'est lui qui autorise a intervenir.
     _t("B2XL", "B2XL (titre d'habilitation)", _C.CONDUITE_PERMIS,
        perimable=True, duree=3 * AN, ordre=210),
-    _t("B1VL", "B1VL (habilitation electrique)", _C.CONDUITE_PERMIS,
+    _t("B1VL", "B1VL (habilitation électrique)", _C.CONDUITE_PERMIS,
        perimable=True, duree=5 * AN, ordre=220),
     _t("CACES_GRUE", "CACES R490 (grue auxiliaire)", _C.HABILITATIONS_CACES,
        perimable=True, duree=5 * AN, ordre=230),
-    _t("CACES_CHARIOT", "CACES R489 (chariot elevateur)", _C.HABILITATIONS_CACES,
+    _t("CACES_CHARIOT", "CACES R489 (chariot élévateur)", _C.HABILITATIONS_CACES,
        perimable=True, duree=5 * AN, ordre=240),
     # Le CACES atteste du stage, il n'autorise pas a conduire dans l'entreprise :
     # c'est le chef d'entreprise qui signe l'autorisation. Complementaire par
     # consequence — elle suit les CACES, elle ne bloque personne seule.
-    _t("AUTORISATION_CONDUITE", "Autorisation de conduite (signee par l'employeur)",
+    _t("AUTORISATION_CONDUITE", "Autorisation de conduite (signée par l'employeur)",
        _C.HABILITATIONS_CACES, perimable=True, duree=5 * AN, ordre=250),
     # Dispensee par VINCI et prise en charge par l'etat, mais rien n'empeche de
     # rouler sans elle — d'ou sa place ici plutot qu'au socle ASF, ou seul AVA
@@ -131,17 +131,17 @@ SEEDS = [
     # Le code reste `FORMATION_SECURITE` : ce type existe depuis longtemps et
     # porte deja des pieces reelles. Un code neuf en aurait fait un doublon vide
     # a cote, et les documents deposes seraient restes accroches a l'ancien.
-    _t("FORMATION_SECURITE", "Formation securite VINCI", _C.FORMATIONS_INTERNES,
+    _t("FORMATION_SECURITE", "Formation sécurité VINCI", _C.FORMATIONS_INTERNES,
        perimable=False, ordre=260),
     # Pour les depanneurs qui ne sont pas ressortissants de l'UE. Perimable sans
     # duree par defaut : elle est portee par le titre lui-meme.
-    _t("AUTORISATION_TRAVAIL", "Autorisation de travail / titre de sejour",
+    _t("AUTORISATION_TRAVAIL", "Autorisation de travail / titre de séjour",
        _C.RH_ADMINISTRATIF, perimable=True, ordre=270),
     _t("JUSTIF_DOMICILE", "Justificatif de domicile", _C.RH_ADMINISTRATIF,
        perimable=False, ordre=280),
     _t("RIB", "RIB", _C.RH_ADMINISTRATIF, perimable=False, ordre=290),
     _t("CV", "CV", _C.RH_ADMINISTRATIF, perimable=False, ordre=300),
-    _t("DIPLOMES", "Diplomes & titres (CAP, BEP, Bac Pro, BTS)", _C.RH_ADMINISTRATIF,
+    _t("DIPLOMES", "Diplômes & titres (CAP, BEP, Bac Pro, BTS)", _C.RH_ADMINISTRATIF,
        perimable=False, ordre=310),
 ]
 

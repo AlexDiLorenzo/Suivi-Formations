@@ -354,11 +354,37 @@ function PastilleEtat({ compte, ton, libelle }) {
   )
 }
 
+// Colonnes triables de la liste. `sensDefaut` = ce qu'on veut voir au premier
+// clic : pour la conformite et la qualification, les plus bas d'abord (ceux dont
+// il faut s'occuper) ; pour les compteurs de manques, les plus hauts d'abord.
+// Trier par conformite et tomber sur les gens a 100 % n'aurait aucun interet.
+const COLONNES = [
+  { cle: 'nom', libelle: 'Dépanneur', sensDefaut: 1, valeur: (l) => nomComplet(l.driver).toLowerCase() },
+  { cle: 'conformite', libelle: 'Conformité', sensDefaut: 1, valeur: (l) => l.driver.score ?? -1 },
+  {
+    cle: 'qualification', libelle: 'Qualification', sensDefaut: 1,
+    valeur: (l) => (l.compte.qualifTotal ? l.compte.qualifAcquises / l.compte.qualifTotal : -1),
+  },
+  { cle: 'manquants', libelle: 'Manquants', sensDefaut: -1, num: true, valeur: (l) => l.compte.manquants },
+  { cle: 'perimes', libelle: 'Périmés', sensDefaut: -1, num: true, valeur: (l) => l.compte.perimes },
+  { cle: 'expirent', libelle: 'Expirent', sensDefaut: -1, num: true, valeur: (l) => l.compte.expirent },
+]
+
 function DriversListView({ docTypes, onOuvrirFiche, rafraichir, data }) {
   const [recherche, setRecherche] = useState('')
   const [filtre, setFiltre] = useState('tous')
+  const [tri, setTri] = useState({ cle: 'nom', sens: 1 })
   const [exportEnCours, setExportEnCours] = useState(false)
   const [message, setMessage] = useState('')
+
+  function trierPar(colonne) {
+    setTri((t) => ({
+      cle: colonne.cle,
+      // Reclic sur la meme colonne : on inverse. Colonne differente : on repart
+      // du sens le plus utile pour elle.
+      sens: t.cle === colonne.cle ? -t.sens : colonne.sensDefaut,
+    }))
+  }
 
   const docTypeById = Object.fromEntries(docTypes.map((dt) => [dt.id, dt]))
 
@@ -384,6 +410,14 @@ function DriversListView({ docTypes, onOuvrirFiche, rafraichir, data }) {
     if (filtre === 'socle') return compte.socleManquants > 0
     if (filtre === 'expirent') return compte.expirent > 0
     return true
+  })
+
+  const colonneTri = COLONNES.find((c) => c.cle === tri.cle) || COLONNES[0]
+  visibles.sort((a, b) => {
+    const va = colonneTri.valeur(a)
+    const vb = colonneTri.valeur(b)
+    if (va === vb) return nomComplet(a.driver).localeCompare(nomComplet(b.driver))
+    return (typeof va === 'string' ? va.localeCompare(vb) : va - vb) * tri.sens
   })
 
   const compteurs = {
@@ -447,12 +481,20 @@ function DriversListView({ docTypes, onOuvrirFiche, rafraichir, data }) {
       ) : (
         <div className="liste-depanneurs">
           <div className="ligne-depanneur entete">
-            <span>Dépanneur</span>
-            <span>Conformité</span>
-            <span>Qualification</span>
-            <span className="col-num">Manquants</span>
-            <span className="col-num">Périmés</span>
-            <span className="col-num">Expirent</span>
+            {COLONNES.map((c) => (
+              <button
+                key={c.cle}
+                type="button"
+                className={`tri-entete ${c.num ? 'col-num' : ''} ${tri.cle === c.cle ? 'actif' : ''}`}
+                onClick={() => trierPar(c)}
+                title={`Classer par ${c.libelle.toLowerCase()}`}
+              >
+                {c.libelle}
+                <span className="fleche-tri">
+                  {tri.cle === c.cle ? (tri.sens === 1 ? '▲' : '▼') : '↕'}
+                </span>
+              </button>
+            ))}
             <span />
           </div>
           {visibles.map(({ driver, compte }) => (
@@ -535,10 +577,11 @@ function LigneDocument({ docType, cell, onDeposer, onVoir }) {
       onDragLeave={() => setSurvol(false)}
       onDrop={onDrop}
     >
+      {/* La famille n'est pas repetee ici : elle titre deja le groupe qui
+          contient cette ligne. Le badge de perimetre, lui, dit pourquoi cette
+          ligne existe chez cette personne et pas chez la voisine. */}
       <span className="doc-libelle">
         {docType.libelle}
-        <span className="doc-categorie">{CATEGORIE_LABEL[docType.categorie] || '—'}</span>
-        {/* Dit pourquoi cette ligne est la : un socle plus large qu'ailleurs. */}
         {docType.perimetre && docType.perimetre !== 'tous' && (
           <span className="tag tag-perimetre">{PERIMETRE_LABEL[docType.perimetre] || docType.perimetre}</span>
         )}

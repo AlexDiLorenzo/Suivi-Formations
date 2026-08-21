@@ -85,7 +85,7 @@ SEEDS = [
     # La date se saisit au depot et l'alerte orange a 90 j fait le rappel.
     #
     # Le code reste `FORMATION_INITIALE` : il porte deja des pieces reelles.
-    _t("FORMATION_INITIALE", "Formation initiale 1MDP (dépannage, véhicules électriques, sécurité)",
+    _t("FORMATION_INITIALE", "Formation initiale (Montpellier Dépannage)",
        _C.FORMATIONS_INTERNES, perimable=True, niveau=_SOCLE, ordre=60),
 
     # ══ SOCLE — equipe ASF ═══════════════════════════════════════════

@@ -13,6 +13,7 @@ from app.db import get_db
 from app.deps import get_current_admin
 from app.models import (
     AdminUser,
+    AuditLog,
     Document,
     DocumentType,
     DocumentVersion,
@@ -23,7 +24,7 @@ from app.models import (
     UploadedBy,
 )
 from app.schemas import DocumentVersionOut, RejectionRequest
-from app.storage import StorageError, decrypt_and_read, encrypt_and_store
+from app.storage import StorageError, decrypt_and_read, delete_file, encrypt_and_store
 
 
 MAX_FILE_BYTES = 10 * 1024 * 1024  # 10 MB
@@ -257,6 +258,91 @@ def download_document(version_id: UUID, db: Annotated[Session, Depends(get_db)])
         media_type=version.mime_type,
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@router.delete("/{version_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_version(
+    version_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    current_admin: Annotated[AdminUser, Depends(get_current_admin)],
+):
+    """Supprime une version deposee par erreur — piece scannee a l'envers,
+    document d'un autre depanneur, mauvais type choisi.
+
+    Ce n'est pas une entorse a l'invariant « jamais d'ecrasement » : celui-ci
+    protege l'historique des renouvellements, pas les erreurs de saisie. Un
+    document qui n'est pas le bon n'est pas une trace de conformite, et le
+    garder dans l'export ZIP remis a l'URSSAF serait pire que de l'effacer.
+    La suppression est explicite, deliberee, et tracee dans `audit_log`.
+
+    Le fichier chiffre part avec la ligne : le conserver ne servirait qu'a
+    encombrer le disque de pieces que plus rien ne reference.
+    """
+    version = db.get(DocumentVersion, version_id)
+    if not version:
+        raise HTTPException(status_code=404, detail="Version introuvable")
+
+    document = db.get(Document, version.document_id)
+    doc_type = db.get(DocumentType, document.document_type_id) if document else None
+    driver = db.get(Driver, document.driver_id) if document else None
+
+    db.add(
+        AuditLog(
+            actor_type="admin",
+            actor_id=str(current_admin.id),
+            action="document_version_deleted",
+            target_type="document_version",
+            target_id=str(version.id),
+            payload={
+                "document_type": doc_type.code if doc_type else None,
+                "driver": f"{driver.nom} {driver.prenom or ''}".strip() if driver else None,
+                "original_filename": version.original_filename,
+                "date_emission": version.date_emission.isoformat(),
+                "statut": version.statut,
+            },
+        )
+    )
+
+    chemin = version.file_path_encrypted
+    if document and document.current_version_id == version.id:
+        # Detacher d'abord : la FK documents.current_version_id est en SET NULL,
+        # mais on veut choisir nous-memes le remplacant plutot que laisser un
+        # trou. Sans ce flush, la suppression de la version se heurte a la FK.
+        document.current_version_id = None
+        db.flush()
+
+    db.delete(version)
+    db.flush()
+
+    if document:
+        restantes = (
+            db.query(DocumentVersion)
+            .filter(DocumentVersion.document_id == document.id)
+            .order_by(DocumentVersion.uploaded_at.desc())
+            .all()
+        )
+        if not restantes:
+            # Plus aucune version : le document lui-meme n'a plus d'objet. Le
+            # laisser ferait une coquille vide que la fiche afficherait comme
+            # un document existant sans fichier.
+            db.delete(document)
+        elif document.current_version_id is None:
+            # On revient a la derniere version validee : la cellule retrouve
+            # l'etat qu'elle avait avant le depot errone, pas un etat vide.
+            validee = next(
+                (v for v in restantes if v.statut == DocumentVersionStatus.VALIDATED.value),
+                None,
+            )
+            document.current_version_id = validee.id if validee else None
+
+    db.commit()
+
+    # Apres le commit : si l'effacement disque echoue, la base reste coherente
+    # et il ne reste qu'un fichier orphelin, pas une ligne fantome.
+    try:
+        delete_file(chemin)
+    except OSError:
+        pass
 
 
 @router.post("/{version_id}/validate", response_model=DocumentVersionOut)

@@ -152,6 +152,10 @@ export const api = {
       triggerBlobDownload(blob, filename)
       return blob.size
     },
+    // Retrait d'une piece deposee par erreur. Ce n'est pas une entorse a
+    // « jamais d'ecrasement » : cet invariant protege l'historique des
+    // renouvellements, pas les erreurs de saisie. Trace cote backend.
+    remove: (versionId) => request(`/documents/${versionId}`, { method: 'DELETE' }),
     validate: (versionId) =>
       request(`/documents/${versionId}/validate`, { method: 'POST' }),
     reject: (versionId, reason) =>

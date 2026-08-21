@@ -1249,6 +1249,53 @@ input[type="file"]::file-selector-button:hover {
   outline-offset: -3px;
 }
 
+/* Document absent : la ligne entiere est la zone de depot. Il n'y a rien
+   d'autre a y faire — ni consulter, ni remplacer — donc obliger a viser un
+   bouton au bout d'un ecran de large n'avait pas de sens. Le survol le dit. */
+.ligne-doc.a-deposer {
+  cursor: pointer;
+}
+
+.ligne-doc.a-deposer:hover {
+  background: rgba(44, 97, 38, 0.05);
+}
+
+.ligne-doc.a-deposer:hover .btn-deposer {
+  background: var(--c-black);
+  border-color: var(--c-black);
+}
+
+.ligne-doc.a-deposer:focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: -2px;
+}
+
+/* Plein plutot que fantome : c'est l'action a faire sur cette ligne, elle doit
+   se voir depuis le haut de la fiche sans avoir a lire chaque etat. */
+.btn-deposer {
+  font-weight: 600;
+}
+
+/* Discret tant qu'on n'y touche pas : supprimer une piece reste rare a cote de
+   consulter et remplacer, et un bouton rouge permanent sur chaque ligne ferait
+   lire la fiche comme une liste d'erreurs. */
+.btn-supprimer {
+  color: var(--c-text-muted);
+  border-color: transparent;
+}
+
+.btn-supprimer:hover {
+  color: var(--c-status-red);
+  border-color: var(--c-status-red);
+}
+
+.btn-danger {
+  background: var(--c-status-red);
+  border-color: var(--c-status-red);
+  color: #fff;
+  font-weight: 600;
+}
+
 /* En colonne, les enfants d'un flex s'etirent : le badge de perimetre prenait
    toute la largeur de la cellule et se lisait comme une barre de fond. */
 .doc-libelle {

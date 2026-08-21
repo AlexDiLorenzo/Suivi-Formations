@@ -561,10 +561,16 @@ function DriversListView({ docTypes, onOuvrirFiche, rafraichir, data }) {
 // Fiche d'un dépanneur
 // =====================================================================
 
-function LigneDocument({ docType, cell, onDeposer, onVoir }) {
+function LigneDocument({ docType, cell, onDeposer, onVoir, onSupprimer }) {
   const [survol, setSurvol] = useState(false)
+  const [confirmeSuppression, setConfirmeSuppression] = useState(false)
+  const [suppressionEnCours, setSuppressionEnCours] = useState(false)
   const absent = cell.status === 'red'
   const perime = absent && cell.reason === 'expired'
+  // Rien a voir, rien a remplacer : le seul geste possible sur cette ligne est
+  // de deposer. Autant rendre la ligne entiere cliquable plutot que d'obliger
+  // a viser un bouton au bout d'un ecran de large.
+  const versionAffichee = cell.current_version_id || cell.pending_version_id
 
   function onDrop(e) {
     e.preventDefault()
@@ -573,12 +579,31 @@ function LigneDocument({ docType, cell, onDeposer, onVoir }) {
     if (fichier) onDeposer(fichier)
   }
 
+  async function supprimer(e) {
+    e.stopPropagation()
+    if (!confirmeSuppression) {
+      setConfirmeSuppression(true)
+      return
+    }
+    setSuppressionEnCours(true)
+    try {
+      await onSupprimer(versionAffichee)
+    } finally {
+      setSuppressionEnCours(false)
+      setConfirmeSuppression(false)
+    }
+  }
+
   return (
     <div
-      className={`ligne-doc ${cell.status} ${survol ? 'survol' : ''}`}
+      className={`ligne-doc ${cell.status} ${survol ? 'survol' : ''} ${absent ? 'a-deposer' : ''}`}
       onDragOver={(e) => { e.preventDefault(); setSurvol(true) }}
       onDragLeave={() => setSurvol(false)}
       onDrop={onDrop}
+      onClick={absent ? () => onDeposer(null) : undefined}
+      role={absent ? 'button' : undefined}
+      tabIndex={absent ? 0 : undefined}
+      onKeyDown={absent ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onDeposer(null) } } : undefined}
     >
       {/* La famille n'est pas repetee ici : elle titre deja le groupe qui
           contient cette ligne. Le badge de perimetre, lui, dit pourquoi cette
@@ -610,16 +635,37 @@ function LigneDocument({ docType, cell, onDeposer, onVoir }) {
         {cell.has_pending_version && <span className="tag tag-pending">à valider</span>}
       </span>
 
-      <span className="doc-actions">
-          {cell.current_version_id && (
+      <span className="doc-actions" onClick={(e) => e.stopPropagation()}>
+        {versionAffichee && (
+          <>
             <button type="button" className="btn btn-ghost btn-sm"
-              onClick={() => onVoir(cell.current_version_id)} title="Voir le document">
+              onClick={() => onVoir(versionAffichee)} title="Voir le document">
               Voir
             </button>
-          )}
-        <button type="button" className="btn btn-ghost btn-sm" onClick={() => onDeposer(null)}>
-          {cell.current_version_id ? 'Remplacer' : 'Déposer'}
-        </button>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => onDeposer(null)}>
+              Remplacer
+            </button>
+            {/* Confirmation sur la ligne plutot qu'en modale : deux clics
+                suffisent a proteger d'un geste involontaire, et une fenetre
+                pour retirer un scan a l'envers serait disproportionnee. */}
+            <button
+              type="button"
+              className={`btn btn-sm ${confirmeSuppression ? 'btn-danger' : 'btn-ghost btn-supprimer'}`}
+              onClick={supprimer}
+              onBlur={() => setConfirmeSuppression(false)}
+              disabled={suppressionEnCours}
+              title="Supprimer ce document — à utiliser si ce n'est pas la bonne pièce"
+            >
+              {suppressionEnCours ? '…' : confirmeSuppression ? 'Confirmer ?' : 'Supprimer'}
+            </button>
+          </>
+        )}
+        {!versionAffichee && (
+          <button type="button" className="btn btn-sm btn-deposer"
+            onClick={() => onDeposer(null)}>
+            ⬆ Déposer
+          </button>
+        )}
       </span>
     </div>
   )
@@ -644,6 +690,16 @@ function DriverSheetView({ driverId, docTypes, data, onRetour, rafraichir }) {
       setMessage(err.detail || 'Erreur lors de l\'export')
     } finally {
       setExportEnCours(false)
+    }
+  }
+
+  async function supprimerVersion(versionId) {
+    setMessage('')
+    try {
+      await api.documents.remove(versionId)
+      rafraichir()
+    } catch (err) {
+      setMessage(err.detail || 'Suppression impossible')
     }
   }
 
@@ -762,6 +818,7 @@ function DriverSheetView({ driverId, docTypes, data, onRetour, rafraichir }) {
                       cell={cell}
                       onVoir={(versionId) => setApercu({ versionId, titre: docType.libelle })}
                       onDeposer={(fichier) => setUpload({ docType, cell, fichier })}
+                      onSupprimer={supprimerVersion}
                     />
                   ))}
                 </div>

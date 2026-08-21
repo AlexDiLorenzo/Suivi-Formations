@@ -33,6 +33,20 @@ def encrypt_and_store(plaintext: bytes) -> tuple[str, str, int]:
     return name, sha256, size
 
 
+def delete_file(relative_path: str) -> bool:
+    """Efface le fichier chiffre d'une version supprimee. Renvoie True si efface.
+
+    Un fichier deja absent n'est pas une erreur : on veut que la ligne parte de
+    la base meme si le fichier a disparu du disque, sinon la fiche resterait
+    bloquee sur un document impossible a retirer.
+    """
+    abs_path = _root() / relative_path
+    if not abs_path.is_file():
+        return False
+    abs_path.unlink()
+    return True
+
+
 def decrypt_and_read(relative_path: str) -> bytes:
     abs_path = _root() / relative_path
     if not abs_path.is_file():

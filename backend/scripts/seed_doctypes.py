@@ -119,7 +119,10 @@ SEEDS = [
     # consequence — elle suit les CACES, elle ne bloque personne seule.
     _t("AUTORISATION_CONDUITE", "Autorisation de conduite (signee par l'employeur)",
        _C.HABILITATIONS_CACES, perimable=True, duree=5 * AN, ordre=250),
-    _t("VINCI_SECURITE", "Formation securite VINCI", _C.FORMATIONS_INTERNES,
+    # Le code reste `FORMATION_SECURITE` : ce type existe depuis longtemps et
+    # porte deja des pieces reelles. Un code neuf en aurait fait un doublon vide
+    # a cote, et les documents deposes seraient restes accroches a l'ancien.
+    _t("FORMATION_SECURITE", "Formation securite VINCI", _C.FORMATIONS_INTERNES,
        perimable=False, ordre=260),
     # Pour les depanneurs qui ne sont pas ressortissants de l'UE. Perimable sans
     # duree par defaut : elle est portee par le titre lui-meme.

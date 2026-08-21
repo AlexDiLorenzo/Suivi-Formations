@@ -1030,11 +1030,19 @@ input[type="file"]::file-selector-button:hover {
   text-align: center;
 }
 
+/* Les barres sont en flex:1 et vont donc jusqu'au bord de leur cellule : sans
+   cette respiration, elles touchent la colonne suivante et les deux indicateurs
+   se lisent comme un seul bloc. */
 .ligne-depanneur .conformite,
 .ligne-depanneur .qualification {
   display: flex;
   align-items: center;
   gap: 8px;
+  padding-right: 20px;
+}
+
+.ligne-depanneur .manque-socle {
+  margin-left: -2px;
 }
 
 /* La qualification se lit en fraction, jamais en pourcentage : « 4/11 » se
@@ -1054,6 +1062,7 @@ input[type="file"]::file-selector-button:hover {
 }
 
 .ligne-depanneur .manque-socle {
+  min-width: 26px;
   font-size: 12px;
   font-weight: 700;
   color: var(--c-status-red);

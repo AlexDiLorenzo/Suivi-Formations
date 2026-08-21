@@ -509,19 +509,22 @@ function DriversListView({ docTypes, onOuvrirFiche, rafraichir, data }) {
                 {driver.equipe === 'asf' && <span className="tag tag-perimetre">ASF</span>}
                 {driver.profil_vehicule === 'plateau_pl' && <span className="tag tag-perimetre">PL</span>}
               </span>
+              {/* Le compteur de manques vient juste apres le pourcentage qu'il
+                  explique. Place apres la barre, il se retrouvait colle a la
+                  fraction de qualification et se lisait comme en faisant partie. */}
               <span className="conformite">
                 <ScoreBadge score={driver.score} />
+                {compte.socleManquants > 0 && (
+                  <span className="manque-socle" title="documents du socle manquants ou périmés">
+                    ⚠ {compte.socleManquants}
+                  </span>
+                )}
                 <span className="barre-score">
                   <span
                     className={`remplissage ${scoreClass(driver.score)}`}
                     style={{ width: `${driver.score ?? 0}%` }}
                   />
                 </span>
-                {compte.socleManquants > 0 && (
-                  <span className="manque-socle" title="documents du socle manquants ou périmés">
-                    ⚠ {compte.socleManquants}
-                  </span>
-                )}
               </span>
               {/* Une fraction, jamais un pourcentage : 4/11 se lit comme un
                   acquis en cours, 36 % comme une note ratee. */}

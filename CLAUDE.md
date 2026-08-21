@@ -7,13 +7,13 @@ Module 1MDP de suivi des habilitations et documents des dépanneurs (permis, FCO
 - **Backend** : FastAPI + SQLAlchemy 2.0 + Alembic + PostgreSQL 16. **Toutes les routes sont préfixées par `/api`** (servies sous le même domaine que le frontend via le proxy nginx).
 - **Auth admin** : JWT (python-jose) + bcrypt + TOTP (pyotp, optionnel)
 - **Stockage fichiers** (dès étape 3) : filesystem chiffré Fernet
-- **Relances** (étape 6) : n8n appelle le backend (cron)
+- **Synchronisation de l'équipe** : portée par le backend lui-même (`app/scheduler.py`, tâche asyncio). Plus aucune dépendance à n8n.
 - **Frontend** : React 18 + Vite (single-file `src/App.jsx` à la DepanTime). En prod, servi par nginx qui proxie aussi `/api/*` vers le backend (un seul domaine, pas de CORS).
 - **Hébergement prod** : VPS Hetzner Ubuntu, voir [memory reference-vps]
 
 ## Périmètre fonctionnel
 
-- **22 types de documents** rangés sur **trois axes** (étape 14) :
+- **21 types de documents** rangés sur **trois axes** (étape 14) :
   - `categorie` = la **famille**, qui dit qui détient le document : `conduite_permis`, `habilitations_caces`, `formations_internes` (les trois relèvent de l'exploitation) et `rh_administratif` (le RH — les diplômes y ont été rapatriés).
   - `niveau_exigence` = ce qu'on en attend, et il n'a plus que **deux** valeurs (étape 14) : `socle` (sans lui, le dépanneur ne roule pas — **seul niveau à compter dans le taux de conformité**) et `complementaire` (valorise le profil, suivi par un second indicateur, jamais un manquement). L'ancien niveau `profil` a disparu, et avec lui la pondération `POIDS_NIVEAU` : tous les documents du socle pèsent pareil, il n'y a pas de demi-manquement.
   - `perimetre` = à qui un document du socle s'applique : `tous`, `asf`, `poids_lourd`. **Dérivé** des attributs synchronisés, jamais coché (voir « Socle et périmètres »). Sans effet sur un complémentaire, proposé à tout le monde.
@@ -31,9 +31,11 @@ Module 1MDP de suivi des habilitations et documents des dépanneurs (permis, FCO
   - **Gris** : non applicable pour ce dépanneur
   - Documents **non-périmables** (RIB, CV, diplômes…) : pas de date → vert si validé, rouge si applicable et absent (jamais orange)
 - **Socle et périmètres** (`app/socle.py`, refondu à l'étape 14) — la ligne de partage de toute l'applicabilité. **Plus rien ne se coche nulle part.**
-  - **Socle commun** (`perimetre = tous`) : permis, pièce d'identité, contrat de travail ou de mise à disposition, DPAE, carte vitale / mutuelle, formation interne 1MDP, formation initiale. Identique pour tout le monde, intérimaires compris.
-  - **Socle élargi** : `perimetre = asf` (VINCI AVA, VINCI EMA — pas d'AVA, pas d'autoroute) et `perimetre = poids_lourd` (permis C/CE, revalidé tous les 5 ans avec visite médicale). Il s'ouvre selon `equipe == "asf"` et `profil_vehicule == "plateau_pl"`, **dérivés de DepanTime** (cf. `perimetres_du_driver`).
-  - **Complémentaires** : FIMO/FCO, B2XL, B1VL, CACES R490/R489, autorisation de conduite, formation sécurité VINCI, autorisation de travail, CV, diplômes, RIB, justificatif de domicile. Proposés à **tout le monde** quel que soit le périmètre : il faut pouvoir déposer un CACES à quelqu'un qui vient de le passer, sans l'avoir déclaré grutier au préalable.
+  - **Socle commun** (`perimetre = tous`, 6 types) : permis, pièce d'identité, contrat de travail ou de mise à disposition, DPAE, carte vitale / mutuelle, **formation initiale 1MDP**. Identique pour tout le monde, intérimaires compris.
+  - **Formation initiale = formation interne** : un seul type (`FORMATION_INITIALE`, décision 2026-08-21). C'est le même parcours — bases du métier, véhicules électriques, sécurité, semaine en binôme — et deux lignes en auraient fait deux manquements pour une seule chose. Périmable sans durée par défaut : la revisite se déclenche sur événement, pas sur un cycle.
+  - **Socle élargi** : `perimetre = asf` (**VINCI AVA seulement** — pas d'AVA, pas d'autoroute) et `perimetre = poids_lourd` (permis C/CE, revalidé tous les 5 ans avec visite médicale). Il s'ouvre selon `equipe == "asf"` et `profil_vehicule == "plateau_pl"`, **dérivés de DepanTime** (cf. `perimetres_du_driver`).
+  - **VINCI EMA n'est pas au socle**, même pour les ASF (décision 2026-08-21) : bonne formation, prise en charge par l'État, mais son absence n'empêche personne de rouler.
+  - **Complémentaires** (13) : FIMO/FCO, B2XL, B1VL, CACES R490/R489, autorisation de conduite, VINCI EMA, formation sécurité VINCI, autorisation de travail, CV, diplômes, RIB, justificatif de domicile. Proposés à **tout le monde** quel que soit le périmètre : il faut pouvoir déposer un CACES à quelqu'un qui vient de le passer, sans l'avoir déclaré grutier au préalable.
   - `reconcilier()` est appelée **à chaque passage de la synchro** et **retire** autant qu'elle ajoute : quitter l'équipe ASF doit cesser de compter l'AVA comme un manquement. Le seul garde-fou : un type qui porte déjà un `Document` n'est jamais retiré — l'exigence disparaît, la trace de conformité non.
   - `PATCH /api/drivers/{id}`, `PUT /api/drivers/{id}/requirements`, `POST`/`DELETE /api/requirements`, `GET /api/profils`, `app/profils.py` et `DriverProfilModal` **n'existent plus**. L'ancien réglage document par document dérivait dès la première mutation oubliée, sans que rien ne le signale : la fiche restait verte.
 - **Deux indicateurs, jamais mélangés** (étape 14) :
@@ -53,7 +55,9 @@ Module 1MDP de suivi des habilitations et documents des dépanneurs (permis, FCO
   - **Si une source répond mal, la synchro échoue sans rien écrire.** Sinon toute son équipe passerait pour disparue, donc supprimée — c'est l'invariant qui protège la base.
   - Clés externes : `mtp:<id>` et `perols:<id>`. Côté Pérols, `presence_drivers.id` est un entier de séquence ; côté DepanTime la clé primaire est composite, d'où le préfixe de site des deux côtés.
   - Pérols n'a **ni prénom ni notion d'archive** : retirer quelqu'un de l'équipe efface sa ligne, donc sa fiche ici (et ses documents) à la synchro suivante. C'est le point de vigilance de ce montage.
-  - **Déclenchement : le cron n8n, et lui seul** (`POST /api/internal/sync/depantime`, header `X-Internal-Secret`). Le bouton « ⟳ Synchroniser » et la route `/api/sync/depantime` ont été retirés à l'étape 14 : l'alignement de la liste et des exigences ne doit dépendre de personne, encore moins d'un clic dont l'absence se voit d'autant moins que tout a l'air à jour.
+  - **Déclenchement : l'application elle-même** (`app/scheduler.py`, 2026-08-21). Une tâche asyncio lancée au démarrage synchronise toutes les `SYNC_INTERVAL_MINUTES` (60 par défaut). Il n'y a plus de workflow n8n, et le bouton « ⟳ Synchroniser » a été retiré à l'étape 14 : l'alignement ne doit dépendre de personne, encore moins d'un clic dont l'absence se voit d'autant moins que tout a l'air à jour. Le porter dans le backend garantit qu'un conteneur qui tourne est un conteneur qui synchronise.
+  - `POST /api/internal/sync/depantime` (header `X-Internal-Secret`) subsiste pour **forcer** une passe sans attendre le tour suivant — après avoir corrigé une équipe dans DepanTime, typiquement. Ce n'est plus ce qui fait tourner la synchro.
+  - **`GET /api/health` expose la dernière synchro** (`scheduler.dernier_resultat`). C'est le seul endroit où une synchro muette depuis des jours peut se voir : l'interface, elle, aura toujours l'air à jour.
   - Ce que les sources possèdent et **écrasent** à chaque passage : nom, prénom, email, date d'entrée, actif/archivé, **équipe, type de véhicule, intérim**. Ce qui reste à HABILITATION : les documents eux-mêmes, et eux seuls.
   - **Une fiche absente des deux sources est supprimée, avec ses documents** (décision de l'exploitant, 2026-08-20). Moins brutal qu'il n'y paraît côté DepanTime, qui *archive* les partants au lieu de les effacer : ne disparaissent vraiment que les fiches erronées ou de test. Le détail, nombre de pièces perdues compris, remonte dans `hors_depantime`.
   - Un dépanneur créé par la synchro reçoit immédiatement son socle (`socle.reconcilier`) : sans cela il s'afficherait 100 % conforme faute de document applicable.
@@ -69,15 +73,16 @@ Module 1MDP de suivi des habilitations et documents des dépanneurs (permis, FCO
 | 3 | Upload admin de documents (avec chiffrement Fernet) | ✅ livré (2026-05-14) |
 | 4 | Flux dépanneur (demande → magic link → upload) | ✅ livré (2026-05-14, sans envoi email — link copiable côté admin) |
 | 5 | Validation admin (pending → validated/rejected) | ✅ livré (2026-05-14) |
-| 6 | Relances automatiques (n8n) | ⏸️ infra backend en place mais désactivée (REMINDERS_SECRET=vide). Décision 2026-05-14 : avec ~40 dépanneurs, relance téléphone manuelle préférée. Remplacé par fonctionnalité "demande groupée par dépanneur". |
+| 6 | Relances automatiques (n8n) | ❌ abandonné (2026-08-21). Jamais utilisé — `reminders` et `document_requests` étaient vides en prod. Table supprimée par la migration 0006, endpoints `/api/internal/reminders/*` retirés. L'étape 13 reprendra le besoin autrement. |
 | 7 | Historique versions + export PDF "état à date T" | à faire |
 | 8 | RGPD : purge configurable post-départ, log d'accès | à faire |
 | 9 | Déploiement prod (sous-domaine, TLS, sauvegardes) | 🟡 backend en ligne sur https://formations.alex-worksmart.com (TLS OK), sauvegardes Postgres restant à mettre en place |
 | 10 | Évolution modèle documentaire (~20 types, profils, scoring, attestation DocuSign) | ✅ livré — 10a schéma (2026-05-15), 10b profil + applicabilité (2026-05-16), docs non-périmables (2026-05-18), 10c scoring + 10d affichage dashboard (2026-05-18), 10e intégration DocuSign (2026-05-18) |
 | 11 | Règlement intérieur : nouveau type (famille `rh_administratif`, pré-coché pour tous via `_COMMUNS`), signé via DocuSign avec un **2ᵉ template**. Prérequis : faire porter le template ID par chaque `DocumentType` (le code n'en gère qu'un seul, `DOCUSIGN_TEMPLATE_ID`) au lieu d'un template global. | à faire |
 | 12 | Lisibilité + synchro DepanTime : liste & fiche à la place de la matrice, 4 familles × 3 niveaux d'exigence, aperçu dans l'app, export ZIP, pièce d'identité générique, retrait de l'attestation sur l'honneur et des demandes par magic link | ✅ livré (2026-08-19) |
-| 13 | Mail automatique des documents manquants (remplace les demandes par magic link retirées à l'étape 12) | à cadrer |
+| 13 | Mail automatique des documents manquants (remplace les demandes par magic link retirées à l'étape 12, et les relances n8n abandonnées à l'étape 6) | à cadrer |
 | 14 | Refonte au standard métier : socle / complémentaire (fin du niveau `profil`), périmètres `asf` et `poids_lourd` dérivés de DepanTime, deux indicateurs (conformité au socle + qualification), fin de tout réglage manuel, synchro sans bouton | ✅ livré (2026-08-21) |
+| 15 | Sortie de n8n : synchro portée par le backend (`app/scheduler.py`), relances supprimées, EMA sorti du socle ASF, formation initiale et formation interne fusionnées | ✅ livré (2026-08-21) |
 
 ## Conventions
 
@@ -105,7 +110,7 @@ Module 1MDP de suivi des habilitations et documents des dépanneurs (permis, FCO
 - **`drivers.prenom` est nullable** depuis la migration 0004 : au dépannage, la fiche DepanTime ne porte souvent qu'un patronyme. Tout affichage doit tolérer `None` (`nomComplet()` côté front, `driver.prenom or ""` côté backend) — l'ancien import CSV *ignorait* ces lignes, ce qui aurait vidé la synchro.
 - **`/api/documents/export` est déclarée AVANT `/{version_id}`** dans `routers/documents.py`. FastAPI résout dans l'ordre de déclaration : l'inverse ferait lire `"export"` comme un UUID et répondrait 422.
 - **En prod, toujours `-f docker-compose.prod.yml`.** Le compose par défaut est celui de dev : il ne déclare **que** `postgres` et `backend`. Un `docker compose up -d --build` sans le `-f` en prod reconstruit le backend, laisse `habilitation-frontend` en **orphelin** sur son ancienne image (seul un `WARN ... Found orphan containers` le signale) et expose Postgres sur le port 5432. Le front continue alors de servir l'ancien bundle : l'application répond 200 mais affiche des fiches vides, l'ancien JavaScript ne connaissant pas le niveau `socle`. Arrivé le 2026-08-21 lors du déploiement de l'étape 14.
-- **`REMINDERS_SECRET` est devenu indispensable** (étape 14). Il garde tout `/api/internal/*`, synchro comprise (`deps.verify_internal_secret` répond 503 s'il est vide). Tant qu'il servait aux seules relances — désactivées par décision — le laisser vide était sans conséquence ; maintenant que le bouton a disparu, un secret vide veut dire **plus aucune synchronisation possible**, sans le moindre message dans l'application : la liste se fige et personne ne le voit.
+- **`REMINDERS_SECRET` ne garde plus que le déclenchement manuel.** Depuis que le scheduler interne existe, un secret vide ne désactive que `POST /api/internal/sync/depantime` (503) : la synchronisation périodique continue. Le nom est devenu trompeur — il ne reste plus une seule relance derrière.
 - **Ordre de déploiement de l'étape 14** : DepanTime d'abord (l'endpoint doit exposer `equipe`/`profil`), puis HABILITATION, puis `seed_doctypes`, puis la synchro. Dans le désordre, `equipe` et `profil` arrivent vides et personne n'obtient le socle élargi — sans erreur visible, les fiches ASF s'affichent simplement conformes à tort.
 - **`equipe` et `profil` sont du texte libre côté HABILITATION**, pas des enums : seules les valeurs `asf` et `plateau_pl` portent une conséquence (`EQUIPE_ASF`, `PROFIL_VEHICULE_POIDS_LOURD` dans `models.py`). DepanTime reste libre d'ajouter une équipe ou un type de véhicule sans rien casser ici.
 - **La synchro retire des exigences, désormais.** `socle.reconcilier` supprime les `DriverRequiredDocument` hors périmètre — sauf si un `Document` y est rattaché. Toute évolution de cette fonction doit garder ce garde-fou : sans lui, une mutation d'équipe effacerait la trace d'un CACES réellement détenu.
@@ -134,8 +139,8 @@ docker compose logs -f backend
 # les exigences correspondantes sur chaque dépanneur.
 docker compose exec backend python -m scripts.seed_doctypes
 
-# Synchronisation de l'équipe : plus de bouton dans l'app, le cron n8n s'en
-# charge. Ce curl reste la seule façon de la déclencher à la main.
+# Synchronisation de l'équipe : elle tourne toute seule (app/scheduler.py,
+# toutes les heures). Ce curl ne sert qu'à forcer une passe immédiate.
 curl -X POST -H "X-Internal-Secret: $REMINDERS_SECRET" \
      https://formations.alex-worksmart.com/api/internal/sync/depantime
 

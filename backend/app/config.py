@@ -18,8 +18,9 @@ class Settings(BaseSettings):
     documents_storage_path: str = "/var/lib/habilitation/documents"
     orange_threshold_days: int = 90
 
-    # Secret partage avec n8n pour les endpoints internes (relances).
-    # Si vide, les endpoints internes sont desactives.
+    # Secret protegeant /api/internal/sync/depantime, qui permet de forcer une
+    # synchronisation sans attendre le tour suivant du scheduler. Si vide,
+    # l'endpoint est desactive (503) — la synchro periodique, elle, continue.
     reminders_secret: str = ""
 
     # Secret partage avec le dashboard de pilotage du site web. Protege
@@ -39,14 +40,15 @@ class Settings(BaseSettings):
     flotte_secret: str = ""
     depantime_timeout_seconds: int = 20
 
-    # Base URL du frontend, utilisee pour construire les magic_link
-    # dans les emails de relance (n8n appelle l'API mais le mail doit
-    # pointer vers le frontend).
-    frontend_base_url: str = "http://localhost:5173"
+    # Cadence de la synchronisation, tenue par l'application elle-meme depuis
+    # qu'il n'y a plus de workflow n8n (cf. app/scheduler.py). L'equipe bouge
+    # rarement : une passe par heure suffit largement, et une source
+    # momentanement muette est rattrapee au tour suivant.
+    sync_interval_minutes: int = 60
+    sync_delai_demarrage_secondes: int = 20
 
-    # Cadence des relances "jamais transmis" (en jours).
-    never_received_grace_days: int = 7
-    never_received_interval_days: int = 7
+    # Base URL du frontend, utilisee pour construire les magic_link.
+    frontend_base_url: str = "http://localhost:5173"
 
     # Envoi d'email via Resend (https://resend.com).
     # Si RESEND_API_KEY est vide, l'envoi est desactive et l'admin

@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app import scheduler
 from app.comptes import amorcer_comptes
 from app.config import get_settings
 from app.routers import (
@@ -38,11 +39,28 @@ def _amorcage():
     commande du compose), la table admin_users existe donc déjà ici.
     """
     amorcer_comptes()
+    # La synchro de l'équipe est portée par l'application : il n'y a plus de
+    # workflow n8n, et plus de bouton non plus. Cf. app/scheduler.py.
+    scheduler.demarrer()
+
+
+@app.on_event("shutdown")
+async def _extinction():
+    await scheduler.arreter()
 
 
 @app.get("/api/health", tags=["meta"])
 def health():
-    return {"status": "ok", "env": _settings.env}
+    """Etat de l'application, et surtout de la derniere synchronisation.
+
+    Une synchro muette est invisible depuis l'interface — tout y a l'air à
+    jour. C'est le seul endroit où on peut s'en apercevoir.
+    """
+    return {
+        "status": "ok",
+        "env": _settings.env,
+        "sync": scheduler.dernier_resultat,
+    }
 
 
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])

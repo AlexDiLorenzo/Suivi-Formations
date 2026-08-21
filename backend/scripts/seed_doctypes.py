@@ -74,23 +74,27 @@ SEEDS = [
        perimable=False, niveau=_SOCLE, ordre=40),
     _t("MUTUELLE", "Carte vitale / mutuelle", _C.RH_ADMINISTRATIF,
        perimable=False, niveau=_SOCLE, ordre=50),
-    # Le parcours en binome : ce qui protege l'entreprise en cas de litige et
-    # devant la medecine du travail. D'ou sa place au socle, formation interne
-    # ou pas, CDI ou interimaire.
-    _t("FORMATION_INTERNE", "Formation interne 1MDP (parcours en binome)", _C.FORMATIONS_INTERNES,
-       perimable=False, niveau=_SOCLE, ordre=60),
+    # Formation initiale et formation interne sont une seule et meme chose : le
+    # parcours qui rend quelqu'un apte a depanner chez 1MDP (bases du metier,
+    # vehicules electriques, securite, semaine en binome). C'est ce qui protege
+    # l'entreprise en cas de litige et devant la medecine du travail, d'ou sa
+    # place au socle — CDI comme interimaire.
+    #
     # Perimable sans duree par defaut : la revisite ne suit pas un cycle fixe,
     # elle se declenche sur evenement (passage au permis B, module manquant).
     # La date se saisit au depot et l'alerte orange a 90 j fait le rappel.
-    _t("FORMATION_INITIALE", "Formation initiale (depannage & vehicules electriques)",
-       _C.FORMATIONS_INTERNES, perimable=True, niveau=_SOCLE, ordre=70),
+    #
+    # Le code reste `FORMATION_INITIALE` : il porte deja des pieces reelles.
+    _t("FORMATION_INITIALE", "Formation initiale 1MDP (depannage, vehicules electriques, securite)",
+       _C.FORMATIONS_INTERNES, perimable=True, niveau=_SOCLE, ordre=60),
 
     # ══ SOCLE — equipe ASF ═══════════════════════════════════════════
-    # Pas d'AVA, pas d'autoroute : bloquant, mais pour l'equipe ASF seulement.
+    # Pas d'AVA, pas d'autoroute : le seul document que l'appartenance a
+    # l'equipe ASF rend bloquant. EMA est une bonne formation, prise en charge
+    # par l'etat, mais son absence n'empeche personne de rouler : elle est
+    # complementaire, y compris pour les ASF.
     _t("VINCI_AVA", "VINCI AVA", _C.FORMATIONS_INTERNES,
-       perimable=True, duree=3 * AN, niveau=_SOCLE, perimetre=_ASF, ordre=80),
-    _t("VINCI_EMA", "VINCI EMA", _C.FORMATIONS_INTERNES,
-       perimable=True, duree=5 * AN, niveau=_SOCLE, perimetre=_ASF, ordre=90),
+       perimable=True, duree=3 * AN, niveau=_SOCLE, perimetre=_ASF, ordre=70),
 
     # ══ SOCLE — poids lourd ══════════════════════════════════════════
     # Le permis lourd se fait revalider tous les 5 ans, visite medicale a
@@ -119,6 +123,11 @@ SEEDS = [
     # consequence — elle suit les CACES, elle ne bloque personne seule.
     _t("AUTORISATION_CONDUITE", "Autorisation de conduite (signee par l'employeur)",
        _C.HABILITATIONS_CACES, perimable=True, duree=5 * AN, ordre=250),
+    # Dispensee par VINCI et prise en charge par l'etat, mais rien n'empeche de
+    # rouler sans elle — d'ou sa place ici plutot qu'au socle ASF, ou seul AVA
+    # est bloquant.
+    _t("VINCI_EMA", "VINCI EMA", _C.FORMATIONS_INTERNES,
+       perimable=True, duree=5 * AN, ordre=255),
     # Le code reste `FORMATION_SECURITE` : ce type existe depuis longtemps et
     # porte deja des pieces reelles. Un code neuf en aurait fait un doublon vide
     # a cote, et les documents deposes seraient restes accroches a l'ancien.

@@ -26,6 +26,7 @@ COMPTES = [
     ("norbert.dilorenzo@montpellierdepannage.com", "Norbert", "HB_PASS_NORBERT"),
     ("sandrine@montpellierdepannage.com", "Sandrine", "HB_PASS_SANDRINE"),
     ("compta@montpellierdepannage.com", "Marie", "HB_PASS_MARIE"),
+    ("ilies@montpellierdepannage.com", "Ilies", "HB_PASS_ILIES"),
     # Acces ad-hoc : pas de compte dans le coffre-fort, mot de passe dictable.
     ("frank@montpellierdepannage.com", "Frank", "HB_PASS_FRANK"),
 ]

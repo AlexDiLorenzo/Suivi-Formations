@@ -87,28 +87,23 @@ Front dispo sur http://localhost:5173. Vite proxie automatiquement `/api/*` vers
 - `POST /api/documents/{version_id}/validate` — admin : pending -> validated, devient current_version
 - `POST /api/documents/{version_id}/reject` body `{reason}` — admin : pending -> rejected (motif obligatoire)
 
-### Endpoints internes (auth header `X-Internal-Secret: $REMINDERS_SECRET`)
+### Endpoint interne (auth header `X-Internal-Secret: $REMINDERS_SECRET`)
 
-- `POST /api/internal/sync/depantime` — aligne la liste et les exigences sur
-  DepanTime et Flotte. **Seule porte d'entree** : le bouton « Synchroniser » a
-  ete retire de l'application, c'est le cron n8n qui declenche.
-- `GET  /api/internal/reminders/due` — calcule les rappels du jour, cree
-  les `Reminder` (sent_at=null) + `DocumentRequest` + magic_link, et
-  retourne `{items: [...], skipped: [...]}`. Idempotent dans la journee.
-- `POST /api/internal/reminders/mark-sent` body `{reminder_ids: [uuid, ...]}`
-  — appele par n8n apres l'envoi des emails pour cocher `sent_at`.
+- `POST /api/internal/sync/depantime` — force une synchronisation immediate de
+  l'equipe depuis DepanTime et Flotte. Ce n'est **pas** ce qui la fait tourner :
+  elle est portee par l'application elle-meme (`backend/app/scheduler.py`, toutes
+  les `SYNC_INTERVAL_MINUTES`). Cet endpoint sert a ne pas attendre le tour
+  suivant, apres avoir corrige une equipe dans DepanTime par exemple.
+- `GET /api/health` (public) expose l'etat de la derniere synchronisation :
+  c'est le seul endroit ou une synchro muette peut se voir.
 
-## Note sur les endpoints internes (relances)
+## Synchronisation de l'equipe
 
-Les endpoints `/api/internal/reminders/*` existent mais ne sont **pas
-utilises pour l'instant** (decision : avec ~40 depanneurs, on relance
-manuellement par telephone au besoin). Pour les desactiver completement,
-laisser `REMINDERS_SECRET` vide dans le `.env` (deja le cas par defaut).
-
-Si tu veux les ressortir plus tard : `GET /api/internal/reminders/due`
-calcule les rappels du jour (j-90/-30/-7 + never_received avec grace
-7j + cadence 7j), `POST /api/internal/reminders/mark-sent` pour
-l'audit. Auth via header `X-Internal-Secret`.
+Elle etait declenchee par un cron n8n ; il n'y a plus de workflow n8n
+(2026-08-21). Le backend s'en charge lui-meme au demarrage puis en boucle, ce
+qui enleve la dependance a un service tiers : un conteneur qui tourne est un
+conteneur qui synchronise. Les relances par email qui passaient aussi par n8n
+ont ete supprimees — elles n'avaient jamais servi.
 
 ## Deploiement (VPS Hetzner)
 

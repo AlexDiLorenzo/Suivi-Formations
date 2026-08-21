@@ -221,20 +221,6 @@ class DocumentRequest(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
-class Reminder(Base):
-    __tablename__ = "reminders"
-
-    id: Mapped[uuid.UUID] = _uuid_pk()
-    driver_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("drivers.id", ondelete="CASCADE"), nullable=False, index=True)
-    document_type_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("document_types.id", ondelete="RESTRICT"), nullable=False)
-    document_version_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("document_versions.id", ondelete="CASCADE"), nullable=True)
-    type: Mapped[str] = mapped_column(String(20), nullable=False)
-    scheduled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    channel: Mapped[str] = mapped_column(String(20), nullable=False, default="email")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-
-
 class SignatureEnvelope(Base):
     """Enveloppe DocuSign pour la signature de l'attestation sur l'honneur (etape 10e).
 

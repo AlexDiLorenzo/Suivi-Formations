@@ -104,6 +104,7 @@ Module 1MDP de suivi des habilitations et documents des dépanneurs (permis, FCO
 - **`external_id_depantime` = `site:id`** (ex. `mtp:7`). Chez DepanTime, `employees` a une **clé primaire composite `(id, site_id)`** : `id` seul n'est unique que par site, deux sites peuvent porter le même. Le format hérité (id nu, posé par l'ancien import CSV) est encore reconnu par `_driver_existant` et réécrit au bon format au passage.
 - **`drivers.prenom` est nullable** depuis la migration 0004 : au dépannage, la fiche DepanTime ne porte souvent qu'un patronyme. Tout affichage doit tolérer `None` (`nomComplet()` côté front, `driver.prenom or ""` côté backend) — l'ancien import CSV *ignorait* ces lignes, ce qui aurait vidé la synchro.
 - **`/api/documents/export` est déclarée AVANT `/{version_id}`** dans `routers/documents.py`. FastAPI résout dans l'ordre de déclaration : l'inverse ferait lire `"export"` comme un UUID et répondrait 422.
+- **En prod, toujours `-f docker-compose.prod.yml`.** Le compose par défaut est celui de dev : il ne déclare **que** `postgres` et `backend`. Un `docker compose up -d --build` sans le `-f` en prod reconstruit le backend, laisse `habilitation-frontend` en **orphelin** sur son ancienne image (seul un `WARN ... Found orphan containers` le signale) et expose Postgres sur le port 5432. Le front continue alors de servir l'ancien bundle : l'application répond 200 mais affiche des fiches vides, l'ancien JavaScript ne connaissant pas le niveau `socle`. Arrivé le 2026-08-21 lors du déploiement de l'étape 14.
 - **`REMINDERS_SECRET` est devenu indispensable** (étape 14). Il garde tout `/api/internal/*`, synchro comprise (`deps.verify_internal_secret` répond 503 s'il est vide). Tant qu'il servait aux seules relances — désactivées par décision — le laisser vide était sans conséquence ; maintenant que le bouton a disparu, un secret vide veut dire **plus aucune synchronisation possible**, sans le moindre message dans l'application : la liste se fige et personne ne le voit.
 - **Ordre de déploiement de l'étape 14** : DepanTime d'abord (l'endpoint doit exposer `equipe`/`profil`), puis HABILITATION, puis `seed_doctypes`, puis la synchro. Dans le désordre, `equipe` et `profil` arrivent vides et personne n'obtient le socle élargi — sans erreur visible, les fiches ASF s'affichent simplement conformes à tort.
 - **`equipe` et `profil` sont du texte libre côté HABILITATION**, pas des enums : seules les valeurs `asf` et `plateau_pl` portent une conséquence (`EQUIPE_ASF`, `PROFIL_VEHICULE_POIDS_LOURD` dans `models.py`). DepanTime reste libre d'ajouter une équipe ou un type de véhicule sans rien casser ici.
@@ -112,6 +113,15 @@ Module 1MDP de suivi des habilitations et documents des dépanneurs (permis, FCO
 ## Commandes utiles
 
 ```powershell
+# Déploiement en prod (VPS) — le -f n'est PAS optionnel, cf. pièges connus.
+# Sans lui, seul le backend est reconstruit et le frontend reste sur l'ancienne image.
+#   cd /srv/habilitation && git pull && docker compose -f docker-compose.prod.yml up -d --build
+#   docker compose -f docker-compose.prod.yml exec backend python -m scripts.seed_doctypes
+#   curl -X POST -H "X-Internal-Secret: $REMINDERS_SECRET" \
+#        https://formations.alex-worksmart.com/api/internal/sync/depantime
+# Le compose de prod n'expose aucun port sur l'hôte : la synchro s'appelle par le
+# domaine, pas par localhost:8000 (qui répond « connexion refusée »).
+
 # Build et démarrage local
 docker compose up -d --build
 

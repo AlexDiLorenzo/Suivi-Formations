@@ -70,10 +70,14 @@ Front dispo sur http://localhost:5173. Vite proxie automatiquement `/api/*` vers
 - `POST /api/auth/login` — email + password (+ totp_code si 2FA active)
 - `GET  /api/auth/me` — profil admin courant
 - `POST /api/auth/totp/setup` / `POST /api/auth/totp/enable` — enrolement TOTP
-- `GET/POST /api/drivers`, `GET/PATCH /api/drivers/{id}`, `POST /api/drivers/{id}/archive`
-- `GET /api/document-types`
-- `GET /api/requirements/driver/{driver_id}`, `POST /api/requirements`, `DELETE /api/requirements/{id}`
-- `GET /api/dashboard` — matrice depanneurs × types avec statut colore par cellule
+- `GET /api/drivers`, `GET /api/drivers/{id}` — **lecture seule** : la liste,
+  l'identite, l'equipe et le type de vehicule viennent de DepanTime et de Flotte,
+  et les documents attendus en decoulent (cf. `backend/app/socle.py`). Ni creation,
+  ni modification, ni reglage d'applicabilite.
+- `GET /api/document-types` — les 22 types, avec `niveau_exigence`
+  (socle / complementaire) et `perimetre` (tous / asf / poids_lourd)
+- `GET /api/dashboard` — etat de chaque document par depanneur, plus les deux
+  indicateurs : conformite au socle (%) et qualification (fraction)
 - `POST /api/documents/upload` — upload PDF (admin) pour un (driver, doc_type) applicable, chiffre en Fernet, cree DocumentVersion validated
 - `GET /api/documents/{version_id}/download` — telecharge la version dechiffree (admin uniquement)
 - `POST /api/document-requests` — admin : cree une demande, renvoie le magic link (TTL 7 jours, usage unique)
@@ -85,6 +89,9 @@ Front dispo sur http://localhost:5173. Vite proxie automatiquement `/api/*` vers
 
 ### Endpoints internes (auth header `X-Internal-Secret: $REMINDERS_SECRET`)
 
+- `POST /api/internal/sync/depantime` — aligne la liste et les exigences sur
+  DepanTime et Flotte. **Seule porte d'entree** : le bouton « Synchroniser » a
+  ete retire de l'application, c'est le cron n8n qui declenche.
 - `GET  /api/internal/reminders/due` — calcule les rappels du jour, cree
   les `Reminder` (sent_at=null) + `DocumentRequest` + magic_link, et
   retourne `{items: [...], skipped: [...]}`. Idempotent dans la journee.

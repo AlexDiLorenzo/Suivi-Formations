@@ -28,9 +28,12 @@ class UploadedBy(str, PyEnum):
     DOCUSIGN = "docusign"
 
 
-class DriverProfil(str, PyEnum):
-    PERMIS_B = "permis_b"
-    PERMIS_C_CE = "permis_c_ce"
+# Valeurs de `employees.equipe` et `employees.profil` chez DepanTime (grille de
+# paie profil x equipe). Stockees en texte libre et non en enum : DepanTime
+# reste libre d'en ajouter sans rien casser ici. Seules ces deux-la portent une
+# consequence documentaire.
+EQUIPE_ASF = "asf"
+PROFIL_VEHICULE_POIDS_LOURD = "plateau_pl"
 
 
 class DocumentCategorie(str, PyEnum):
@@ -41,24 +44,31 @@ class DocumentCategorie(str, PyEnum):
 
 
 class DocumentNiveauExigence(str, PyEnum):
-    """Ce qui decide de l'ordre d'affichage de la fiche et du poids du score.
+    """Ce qu'on attend d'un document — deux niveaux, et deux seulement.
 
-    OBLIGATOIRE  : attendu de tout depanneur, sans exception.
-    PROFIL       : attendu selon le profil (permis C/CE, grue...).
-    COMPLEMENTAIRE : utile a conserver, mais son absence n'est pas un manquement.
+    SOCLE          : sans lui le depanneur ne roule pas. Seul niveau qui entre
+                     dans le taux de conformite.
+    COMPLEMENTAIRE : valorise le profil. Suivi par un second indicateur, mais
+                     son absence n'est jamais un manquement.
     """
 
-    OBLIGATOIRE = "obligatoire"
-    PROFIL = "profil"
+    SOCLE = "socle"
     COMPLEMENTAIRE = "complementaire"
 
 
-# Poids du niveau dans le score de conformite.
-POIDS_NIVEAU = {
-    DocumentNiveauExigence.OBLIGATOIRE.value: 3,
-    DocumentNiveauExigence.PROFIL.value: 2,
-    DocumentNiveauExigence.COMPLEMENTAIRE.value: 1,
-}
+class DocumentPerimetre(str, PyEnum):
+    """A qui un document du socle s'applique.
+
+    Le perimetre est **derive** des attributs synchronises depuis DepanTime, il
+    ne se coche nulle part : c'est ce qui distingue ce mecanisme de l'ancien
+    niveau `profil`, qui se reglait document par document sur chaque fiche.
+
+    Sans effet sur un COMPLEMENTAIRE : ceux-la sont proposes a tout le monde.
+    """
+
+    TOUS = "tous"
+    ASF = "asf"
+    POIDS_LOURD = "poids_lourd"
 
 
 class DocumentModeAcquisition(str, PyEnum):
@@ -112,7 +122,12 @@ class Driver(Base):
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     telephone: Mapped[str | None] = mapped_column(String(32), nullable=True)
     statut: Mapped[str] = mapped_column(String(20), nullable=False, default=DriverStatus.ACTIVE.value)
-    profil: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # Attributs synchronises depuis DepanTime (`employees.equipe` / `.profil` /
+    # `.interim`) : ils decident du perimetre documentaire et ne se reglent pas
+    # ici. Cote Perols, l'equipe est reputee entierement poids lourd.
+    equipe: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    profil_vehicule: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    interim: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     date_entree: Mapped[date | None] = mapped_column(Date, nullable=True)
     date_sortie: Mapped[date | None] = mapped_column(Date, nullable=True)
     last_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -135,6 +150,9 @@ class DocumentType(Base):
     est_perimable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     niveau_exigence: Mapped[str] = mapped_column(
         String(20), nullable=False, default=DocumentNiveauExigence.COMPLEMENTAIRE.value
+    )
+    perimetre: Mapped[str] = mapped_column(
+        String(20), nullable=False, default=DocumentPerimetre.TOUS.value
     )
     mode_acquisition: Mapped[str] = mapped_column(String(20), nullable=False, default=DocumentModeAcquisition.UPLOAD.value)
     display_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

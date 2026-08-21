@@ -8,9 +8,10 @@ ajoute la-bas apparait ici, un depanneur archive la-bas est archive ici.
 L'inverse n'est jamais vrai : rien n'est renvoye vers les sources.
 
 Ce qui appartient a DepanTime (ecrase a chaque passage) : nom, prenom, email,
-date d'entree, statut actif/archive.
-Ce qui appartient a HABILITATION (jamais touche par la synchro) : le profil de
-permis, l'applicabilite des documents, et bien sur les documents eux-memes.
+date d'entree, statut actif/archive, **equipe, type de vehicule et interim**.
+Ces trois derniers decident du perimetre documentaire (cf. app/socle.py) : plus
+rien ne se coche a la main ici, l'applicabilite se recalcule a chaque passage.
+Ce qui appartient a HABILITATION : les documents eux-memes, et eux seuls.
 
 L'alignement est strict : une fiche absente des deux sources est **supprimee**,
 avec ses documents (decision de l'exploitant, 2026-08-20). Ce n'est pas aussi
@@ -29,17 +30,24 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.models import (
+    PROFIL_VEHICULE_POIDS_LOURD,
     Document,
-    DocumentType,
     Driver,
-    DriverRequiredDocument,
     DriverStatus,
 )
-from app.socle import appliquer_socle
+from app.socle import reconcilier
 
 
 class SyncError(RuntimeError):
     """Echec de la synchro — DepanTime injoignable, secret refuse, reponse illisible."""
+
+
+SITE_PEROLS = "perols"
+
+# A Perols, personne ne saisit de type de vehicule : l'equipe y est reputee
+# entierement poids lourd, sauf l'atelier — un mecanicien n'a pas a produire un
+# permis C. `poste` y vaut `presence_drivers.categorie`.
+_POSTES_SANS_POIDS_LOURD = {"mecanicien"}
 
 
 @dataclass
@@ -49,7 +57,8 @@ class SyncResult:
     archives: int = 0
     reactives: int = 0
     supprimes: int = 0
-    socle_poses: int = 0
+    exigences_posees: int = 0
+    exigences_retirees: int = 0
     ignores: list[str] = field(default_factory=list)
     hors_depantime: list[str] = field(default_factory=list)
 
@@ -124,15 +133,18 @@ def recuperer_depanneurs() -> list[dict]:
     return tout
 
 
-def _appliquer_socle(db: Session, driver: Driver) -> int:
-    """Pose le socle sur un depanneur (cf. app/socle.py).
+def _profil_vehicule(site_id: str, item: dict) -> str | None:
+    """Le type de vehicule conduit, d'ou decoule l'exigence de permis lourd.
 
-    Applique a **tout le monde** a chaque passage, pas seulement aux arrivants :
-    les fiches anterieures a la synchro (import CSV du 15/05) n'avaient aucun
-    document requis et s'affichaient donc entierement grises, sans rien a
-    fournir — exactement l'inverse du signal recherche.
+    DepanTime le tient dans `employees.profil` (grille de paie). Flotte ne le
+    tient pas : l'equipe de Perols est reputee poids lourd, atelier excepte.
     """
-    return appliquer_socle(db, driver.id)
+    if site_id == SITE_PEROLS:
+        poste = (item.get("poste") or "").strip().lower()
+        if poste in _POSTES_SANS_POIDS_LOURD:
+            return None
+        return PROFIL_VEHICULE_POIDS_LOURD
+    return (item.get("profil") or "").strip() or None
 
 
 def _driver_existant(db: Session, site_id: str, employee_id: str) -> Driver | None:
@@ -170,6 +182,9 @@ def synchroniser(db: Session) -> SyncResult:
         actif = item.get("active") is not False
         prenom = (item.get("prenom") or "").strip() or None
         email = (item.get("email") or "").strip() or None
+        equipe = (item.get("equipe") or "").strip() or None
+        profil_vehicule = _profil_vehicule(site_id, item)
+        interim = item.get("interim") is True
 
         driver = _driver_existant(db, site_id, employee_id)
         if driver is None:
@@ -178,27 +193,37 @@ def synchroniser(db: Session) -> SyncResult:
                 nom=nom,
                 prenom=prenom,
                 email=email,
+                equipe=equipe,
+                profil_vehicule=profil_vehicule,
+                interim=interim,
                 date_entree=_parse_date(item.get("date_entree")),
                 statut=DriverStatus.ACTIVE.value if actif else DriverStatus.ARCHIVED.value,
                 last_sync_at=now,
             )
             db.add(driver)
             db.flush()
-            resultat.socle_poses += _appliquer_socle(db, driver)
+            poses, retires = reconcilier(db, driver)
+            resultat.exigences_posees += poses
+            resultat.exigences_retirees += retires
             resultat.crees += 1
             continue
-
-        # Le socle est (re)pose a chaque passage : c'est ce qui rattrape les
-        # fiches anterieures a la synchro, restees sans aucun document requis.
-        resultat.socle_poses += _appliquer_socle(db, driver)
 
         driver.nom = nom
         driver.prenom = prenom
         driver.email = email
+        driver.equipe = equipe
+        driver.profil_vehicule = profil_vehicule
+        driver.interim = interim
         date_entree = _parse_date(item.get("date_entree"))
         if date_entree:
             driver.date_entree = date_entree
         driver.last_sync_at = now
+
+        # Recalcule apres coup, sur les attributs qu'on vient d'ecrire : muter
+        # d'ASF vers Ville doit retirer l'exigence d'AVA dans le meme passage.
+        poses, retires = reconcilier(db, driver)
+        resultat.exigences_posees += poses
+        resultat.exigences_retirees += retires
 
         etait_actif = driver.statut == DriverStatus.ACTIVE.value
         if actif and not etait_actif:

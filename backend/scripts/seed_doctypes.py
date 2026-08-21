@@ -8,21 +8,26 @@ si des documents reels y sont encore rattaches (FK RESTRICT) : c'est voulu, on
 ne detruit pas des fichiers de conformite en silence — le type est alors laisse
 en place avec un avertissement.
 
-Deux axes portent l'affichage de la fiche depanneur :
-  - `categorie`       : la famille (qui detient le document)
-  - `niveau_exigence` : obligatoire / selon profil / complementaire
+Trois axes decrivent chaque type :
 
-Le niveau est modifiable dans l'application ; ce seed ne fait que poser un
-point de depart. Il n'ecrase donc PAS un niveau deja ajuste a la main
-(cf. --reset-niveaux pour forcer le retour aux valeurs d'origine).
+  - `categorie`       : la famille, qui dit qui detient le document
+  - `niveau_exigence` : SOCLE (sans lui, on ne roule pas — seul niveau compte
+                        dans le taux de conformite) ou COMPLEMENTAIRE (valorise
+                        le profil, suivi par un second indicateur)
+  - `perimetre`       : a qui un document du socle s'applique. `tous` par
+                        defaut ; `asf` et `poids_lourd` sont **derives** des
+                        attributs synchronises depuis DepanTime, jamais coches.
+                        Sans effet sur un complementaire, propose a tout le monde.
+
+Ce fichier est la seule source de verite de ces trois axes : rien de tout cela
+n'est reglable depuis l'application. Un reseed les reapplique tels quels.
 """
-import argparse
-
 from app.db import SessionLocal
 from app.models import (
     DocumentCategorie,
     DocumentModeAcquisition,
     DocumentNiveauExigence,
+    DocumentPerimetre,
     DocumentType,
     DriverRequiredDocument,
     Document,
@@ -34,6 +39,7 @@ AN = 365
 
 def _t(code, libelle, categorie, *, perimable, duree=None,
        niveau=DocumentNiveauExigence.COMPLEMENTAIRE,
+       perimetre=DocumentPerimetre.TOUS,
        mode=DocumentModeAcquisition.UPLOAD, ordre):
     return {
         "code": code,
@@ -42,70 +48,106 @@ def _t(code, libelle, categorie, *, perimable, duree=None,
         "est_perimable": perimable,
         "duree_validite_jours_default": duree,
         "niveau_exigence": niveau.value,
+        "perimetre": perimetre.value,
         "mode_acquisition": mode.value,
         "display_order": ordre,
     }
 
 
 _C = DocumentCategorie
-_OBLIG = DocumentNiveauExigence.OBLIGATOIRE
-_PROFIL = DocumentNiveauExigence.PROFIL
+_SOCLE = DocumentNiveauExigence.SOCLE
+_ASF = DocumentPerimetre.ASF
+_PL = DocumentPerimetre.POIDS_LOURD
 
 SEEDS = [
-    # ── Conduite & permis ────────────────────────────────────────────
-    _t("PERMIS", "Permis de conduire", _C.CONDUITE_PERMIS, perimable=True, duree=15 * AN, niveau=_OBLIG, ordre=10),
-    _t("FIMO_FCO", "FIMO / FCO", _C.CONDUITE_PERMIS, perimable=True, duree=5 * AN, niveau=_PROFIL, ordre=20),
-    _t("B2XL", "B2XL", _C.CONDUITE_PERMIS, perimable=True, duree=3 * AN, niveau=_PROFIL, ordre=30),
-    _t("B1VL", "B1VL", _C.CONDUITE_PERMIS, perimable=True, duree=5 * AN, niveau=_PROFIL, ordre=40),
+    # ══ SOCLE — tout le monde ════════════════════════════════════════
+    _t("PERMIS", "Permis de conduire", _C.CONDUITE_PERMIS,
+       perimable=True, duree=15 * AN, niveau=_SOCLE, ordre=10),
+    _t("PIECE_IDENTITE", "Piece d'identite (CNI ou passeport)", _C.RH_ADMINISTRATIF,
+       perimable=True, duree=15 * AN, niveau=_SOCLE, ordre=20),
+    # Un CDI produit un contrat de travail, un interimaire un contrat de mise a
+    # disposition remis a jour a chaque mission : c'est le meme creneau du
+    # dossier, deux types en feraient un rouge permanent chez chacun des deux.
+    _t("CONTRAT_TRAVAIL", "Contrat de travail ou de mise a disposition", _C.RH_ADMINISTRATIF,
+       perimable=False, niveau=_SOCLE, ordre=30),
+    _t("DPAE", "DPAE (declaration prealable a l'embauche)", _C.RH_ADMINISTRATIF,
+       perimable=False, niveau=_SOCLE, ordre=40),
+    _t("MUTUELLE", "Carte vitale / mutuelle", _C.RH_ADMINISTRATIF,
+       perimable=False, niveau=_SOCLE, ordre=50),
+    # Le parcours en binome : ce qui protege l'entreprise en cas de litige et
+    # devant la medecine du travail. D'ou sa place au socle, formation interne
+    # ou pas, CDI ou interimaire.
+    _t("FORMATION_INTERNE", "Formation interne 1MDP (parcours en binome)", _C.FORMATIONS_INTERNES,
+       perimable=False, niveau=_SOCLE, ordre=60),
+    # Perimable sans duree par defaut : la revisite ne suit pas un cycle fixe,
+    # elle se declenche sur evenement (passage au permis B, module manquant).
+    # La date se saisit au depot et l'alerte orange a 90 j fait le rappel.
+    _t("FORMATION_INITIALE", "Formation initiale (depannage & vehicules electriques)",
+       _C.FORMATIONS_INTERNES, perimable=True, niveau=_SOCLE, ordre=70),
 
-    # ── Habilitations & CACES ────────────────────────────────────────
-    _t("AUTORISATION_CONDUITE", "Autorisation de conduite (entreprise)", _C.HABILITATIONS_CACES, perimable=True, duree=5 * AN, niveau=_OBLIG, ordre=50),
-    _t("CACES_GRUE", "CACES grue", _C.HABILITATIONS_CACES, perimable=True, duree=5 * AN, niveau=_PROFIL, ordre=60),
-    _t("CACES_CHARIOT", "CACES chariot elevateur", _C.HABILITATIONS_CACES, perimable=True, duree=5 * AN, niveau=_PROFIL, ordre=70),
+    # ══ SOCLE — equipe ASF ═══════════════════════════════════════════
+    # Pas d'AVA, pas d'autoroute : bloquant, mais pour l'equipe ASF seulement.
+    _t("VINCI_AVA", "VINCI AVA", _C.FORMATIONS_INTERNES,
+       perimable=True, duree=3 * AN, niveau=_SOCLE, perimetre=_ASF, ordre=80),
+    _t("VINCI_EMA", "VINCI EMA", _C.FORMATIONS_INTERNES,
+       perimable=True, duree=5 * AN, niveau=_SOCLE, perimetre=_ASF, ordre=90),
 
-    # ── Formations internes ──────────────────────────────────────────
-    _t("FORMATION_INITIALE", "Formation initiale (interne)", _C.FORMATIONS_INTERNES, perimable=False, niveau=_OBLIG, ordre=80),
-    _t("VINCI_EMA", "VINCI EMA", _C.FORMATIONS_INTERNES, perimable=False, ordre=90),
-    _t("VINCI_AVA", "VINCI AVA", _C.FORMATIONS_INTERNES, perimable=False, ordre=100),
+    # ══ SOCLE — poids lourd ══════════════════════════════════════════
+    # Le permis lourd se fait revalider tous les 5 ans, visite medicale a
+    # l'appui — la date portee sur le permis fait foi.
+    _t("PERMIS_PL", "Permis C / CE (poids lourd)", _C.CONDUITE_PERMIS,
+       perimable=True, duree=5 * AN, niveau=_SOCLE, perimetre=_PL, ordre=100),
 
-    # ── RH & administratif ───────────────────────────────────────────
-    _t("PIECE_IDENTITE", "Piece d'identite (CNI ou passeport)", _C.RH_ADMINISTRATIF, perimable=True, duree=15 * AN, niveau=_OBLIG, ordre=110),
-    _t("CONTRAT_TRAVAIL", "Contrat de travail", _C.RH_ADMINISTRATIF, perimable=False, niveau=_OBLIG, ordre=120),
-    _t("DPAE", "DPAE (declaration prealable a l'embauche)", _C.RH_ADMINISTRATIF, perimable=False, niveau=_OBLIG, ordre=130),
-    _t("JUSTIF_DOMICILE", "Justificatif de domicile", _C.RH_ADMINISTRATIF, perimable=False, ordre=140),
-    _t("RIB", "RIB", _C.RH_ADMINISTRATIF, perimable=False, ordre=150),
-    _t("MUTUELLE", "Mutuelle", _C.RH_ADMINISTRATIF, perimable=False, ordre=160),
-    _t("CV", "CV", _C.RH_ADMINISTRATIF, perimable=False, ordre=170),
-    _t("DIPLOMES", "Diplomes & titres (CAP, BEP, Bac Pro, BTS)", _C.RH_ADMINISTRATIF, perimable=False, ordre=180),
+    # ══ COMPLEMENTAIRES ══════════════════════════════════════════════
+    # La FCO ne conditionne pas le permis C : elle vaut qualification, pas
+    # autorisation. Son vrai enjeu est ailleurs — la laisser perimer oblige a
+    # repasser la FIMO, soit 30 jours de formation au lieu d'un recyclage.
+    _t("FIMO_FCO", "FIMO / FCO", _C.CONDUITE_PERMIS,
+       perimable=True, duree=5 * AN, ordre=200),
+    # La piece qui compte est le titre d'habilitation, pas l'attestation de
+    # formation : c'est lui qui autorise a intervenir.
+    _t("B2XL", "B2XL (titre d'habilitation)", _C.CONDUITE_PERMIS,
+       perimable=True, duree=3 * AN, ordre=210),
+    _t("B1VL", "B1VL (habilitation electrique)", _C.CONDUITE_PERMIS,
+       perimable=True, duree=5 * AN, ordre=220),
+    _t("CACES_GRUE", "CACES R490 (grue auxiliaire)", _C.HABILITATIONS_CACES,
+       perimable=True, duree=5 * AN, ordre=230),
+    _t("CACES_CHARIOT", "CACES R489 (chariot elevateur)", _C.HABILITATIONS_CACES,
+       perimable=True, duree=5 * AN, ordre=240),
+    # Le CACES atteste du stage, il n'autorise pas a conduire dans l'entreprise :
+    # c'est le chef d'entreprise qui signe l'autorisation. Complementaire par
+    # consequence — elle suit les CACES, elle ne bloque personne seule.
+    _t("AUTORISATION_CONDUITE", "Autorisation de conduite (signee par l'employeur)",
+       _C.HABILITATIONS_CACES, perimable=True, duree=5 * AN, ordre=250),
+    _t("VINCI_SECURITE", "Formation securite VINCI", _C.FORMATIONS_INTERNES,
+       perimable=False, ordre=260),
+    # Pour les depanneurs qui ne sont pas ressortissants de l'UE. Perimable sans
+    # duree par defaut : elle est portee par le titre lui-meme.
+    _t("AUTORISATION_TRAVAIL", "Autorisation de travail / titre de sejour",
+       _C.RH_ADMINISTRATIF, perimable=True, ordre=270),
+    _t("JUSTIF_DOMICILE", "Justificatif de domicile", _C.RH_ADMINISTRATIF,
+       perimable=False, ordre=280),
+    _t("RIB", "RIB", _C.RH_ADMINISTRATIF, perimable=False, ordre=290),
+    _t("CV", "CV", _C.RH_ADMINISTRATIF, perimable=False, ordre=300),
+    _t("DIPLOMES", "Diplomes & titres (CAP, BEP, Bac Pro, BTS)", _C.RH_ADMINISTRATIF,
+       perimable=False, ordre=310),
 ]
 
-# Champs poses a chaque passage. `niveau_exigence` en est volontairement absent :
-# il est reglable depuis l'application, un reseed ne doit pas defaire ce reglage.
-_CHAMPS_TOUJOURS = (
+_CHAMPS = (
     "libelle", "categorie", "est_perimable", "duree_validite_jours_default",
-    "mode_acquisition", "display_order",
+    "niveau_exigence", "perimetre", "mode_acquisition", "display_order",
 )
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--reset-niveaux",
-        action="store_true",
-        help="Reapplique aussi les niveaux d'exigence d'origine (ecrase les reglages faits dans l'app)",
-    )
-    args = parser.parse_args()
-
     db = SessionLocal()
     try:
         codes = {s["code"] for s in SEEDS}
         for seed in SEEDS:
             existing = db.query(DocumentType).filter(DocumentType.code == seed["code"]).first()
             if existing:
-                for key in _CHAMPS_TOUJOURS:
+                for key in _CHAMPS:
                     setattr(existing, key, seed[key])
-                if args.reset_niveaux:
-                    existing.niveau_exigence = seed["niveau_exigence"]
                 print(f"~ {seed['code']} mis a jour")
             else:
                 db.add(DocumentType(**seed))
@@ -130,7 +172,9 @@ def main() -> None:
             print(f"- {obsolete.code} supprime (obsolete, applicabilites purgees)")
 
         db.commit()
-        print(f"\n{len(SEEDS)} types en place.")
+        socle = sum(1 for s in SEEDS if s["niveau_exigence"] == DocumentNiveauExigence.SOCLE.value)
+        print(f"\n{len(SEEDS)} types en place — {socle} au socle, {len(SEEDS) - socle} complementaires.")
+        print("Pense a relancer la synchro : c'est elle qui pose les nouvelles exigences.")
     finally:
         db.close()
 

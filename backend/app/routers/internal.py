@@ -10,7 +10,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
@@ -32,7 +32,9 @@ from app.schemas import (
     DueRemindersResponse,
     MarkSentRequest,
     SkippedReminderItem,
+    SyncResultOut,
 )
+from app.sync_depantime import SyncError, synchroniser
 
 
 router = APIRouter(dependencies=[Depends(verify_internal_secret)])
@@ -199,16 +201,31 @@ def reminders_due(db: Annotated[Session, Depends(get_db)]):
     return DueRemindersResponse(items=items, skipped=skipped)
 
 
-@router.post("/sync/depantime")
+@router.post("/sync/depantime", response_model=SyncResultOut)
 def sync_depantime(db: Annotated[Session, Depends(get_db)]):
-    """Synchro de l'equipe declenchee par le cron n8n.
+    """Synchro de l'equipe, declenchee par le cron n8n — et par lui seul.
 
-    Meme operation que le bouton de l'application ; c'est ce qui rend
-    l'alignement automatique plutot que dependant d'un clic.
+    C'est desormais la seule porte d'entree : le bouton « Synchroniser » a ete
+    retire de l'application (2026-08-21). L'alignement de la liste et des
+    exigences ne doit dependre de personne, encore moins d'un clic dont
+    l'absence se voit d'autant moins que tout a l'air a jour.
     """
-    from app.routers.sync import executer
-
-    return executer(db)
+    try:
+        resultat = synchroniser(db)
+    except SyncError as exc:
+        # 502 et non 500 : la panne vient d'un service tiers, pas d'ici.
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return SyncResultOut(
+        crees=resultat.crees,
+        mis_a_jour=resultat.mis_a_jour,
+        archives=resultat.archives,
+        reactives=resultat.reactives,
+        supprimes=resultat.supprimes,
+        exigences_posees=resultat.exigences_posees,
+        exigences_retirees=resultat.exigences_retirees,
+        ignores=resultat.ignores,
+        hors_depantime=resultat.hors_depantime,
+    )
 
 
 @router.post("/reminders/mark-sent")

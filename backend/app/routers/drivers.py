@@ -1,11 +1,13 @@
-"""Consultation des depanneurs et reglage de ce qu'on exige d'eux.
+"""Consultation des depanneurs — en lecture seule, sans exception.
 
-La liste elle-meme n'est pas modifiable ici : elle est le reflet de l'equipe du
-depannage tenue dans DepanTime (cf. app/sync_depantime.py). Ni creation, ni
-archivage, ni modification de l'identite — tout cela serait ecrase a la
-synchronisation suivante et ferait diverger les deux outils. Ne restent
-modifiables que le profil de permis et l'applicabilite des documents, qui
-n'existent que dans cette application.
+Rien ne se modifie ici. La liste est le reflet de l'equipe tenue dans DepanTime
+et dans Flotte (cf. app/sync_depantime.py) : identite, statut, equipe, type de
+vehicule et interim y sont reecrits a chaque synchronisation. Ce qu'on attend
+de chacun en decoule (cf. app/socle.py) au lieu de se cocher — l'ancien reglage
+manuel de l'applicabilite derivait des la premiere mutation oubliee, et le
+niveau d'exigence, lui, appartient au seed des types.
+
+Cette application ne detient que les documents eux-memes.
 """
 from collections import defaultdict
 from typing import Annotated
@@ -16,15 +18,8 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.deps import get_current_admin
-from app.models import (
-    DocumentType,
-    Driver,
-    DriverProfil,
-    DriverRequiredDocument,
-    DriverStatus,
-)
-from app.schemas import DriverOut, DriverUpdate, RequirementsSync
-from app.socle import ids_du_socle
+from app.models import Driver, DriverRequiredDocument, DriverStatus
+from app.schemas import DriverOut
 
 
 router = APIRouter(dependencies=[Depends(get_current_admin)])
@@ -38,7 +33,9 @@ def _serialize(driver: Driver, doctype_ids: list[UUID]) -> DriverOut:
         email=driver.email,
         telephone=driver.telephone,
         statut=driver.statut,
-        profil=driver.profil,
+        equipe=driver.equipe,
+        profil_vehicule=driver.profil_vehicule,
+        interim=driver.interim,
         date_entree=driver.date_entree,
         date_sortie=driver.date_sortie,
         external_id_depantime=driver.external_id_depantime,
@@ -81,71 +78,5 @@ def get_driver(driver_id: UUID, db: Annotated[Session, Depends(get_db)]):
     driver = db.get(Driver, driver_id)
     if not driver:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Depanneur introuvable")
-    grouped = _load_requirements(db, [driver.id])
-    return _serialize(driver, grouped.get(driver.id, []))
-
-
-@router.patch("/{driver_id}", response_model=DriverOut)
-def update_driver(driver_id: UUID, payload: DriverUpdate, db: Annotated[Session, Depends(get_db)]):
-    """Modifie le profil de permis, et rien d'autre (cf. DriverUpdate)."""
-    driver = db.get(Driver, driver_id)
-    if not driver:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Depanneur introuvable")
-    donnees = payload.model_dump(exclude_unset=True)
-    profil = donnees.get("profil")
-    if profil is not None and profil not in {p.value for p in DriverProfil}:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Profil inconnu"
-        )
-    for k, v in donnees.items():
-        setattr(driver, k, v)
-    db.commit()
-    db.refresh(driver)
-    grouped = _load_requirements(db, [driver.id])
-    return _serialize(driver, grouped.get(driver.id, []))
-
-
-@router.put("/{driver_id}/requirements", response_model=DriverOut)
-def sync_requirements(
-    driver_id: UUID,
-    payload: RequirementsSync,
-    db: Annotated[Session, Depends(get_db)],
-):
-    driver = db.get(Driver, driver_id)
-    if not driver:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Depanneur introuvable")
-
-    target = set(payload.document_type_ids)
-    if target:
-        valid_count = (
-            db.query(DocumentType).filter(DocumentType.id.in_(target)).count()
-        )
-        if valid_count != len(target):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Au moins un type de document est inconnu",
-            )
-
-    # Le socle s'impose : seules les habilitations se cochent. On le reajoute
-    # ici quoi qu'envoie le client — sans quoi un decochage passerait, pour
-    # etre defait a la synchro suivante, ce qui serait incomprehensible.
-    target |= ids_du_socle(db)
-
-    existing = (
-        db.query(DriverRequiredDocument)
-        .filter(DriverRequiredDocument.driver_id == driver_id)
-        .all()
-    )
-    existing_ids = {r.document_type_id for r in existing}
-
-    for r in existing:
-        if r.document_type_id not in target:
-            db.delete(r)
-
-    for new_id in target - existing_ids:
-        db.add(DriverRequiredDocument(driver_id=driver_id, document_type_id=new_id))
-
-    db.commit()
-    db.refresh(driver)
     grouped = _load_requirements(db, [driver.id])
     return _serialize(driver, grouped.get(driver.id, []))

@@ -10,9 +10,9 @@ from app.config import get_settings
 from app.db import get_db
 from app.deps import get_current_admin
 from app.models import (
-    POIDS_NIVEAU,
     Document,
     DocumentRequest,
+    DocumentNiveauExigence,
     DocumentType,
     DocumentVersion,
     DocumentVersionStatus,
@@ -102,8 +102,14 @@ def get_dashboard(db: Annotated[Session, Depends(get_db)]):
 
     counter: Counter = Counter()
     out_drivers: list[DashboardDriver] = []
-    global_applicable_weight = 0
-    global_compliant_weight = 0
+    socle_total_global = 0
+    socle_acquis_global = 0
+    qualif_total_global = 0
+    qualif_acquises_global = 0
+    est_socle = {
+        dt.id: dt.niveau_exigence == DocumentNiveauExigence.SOCLE.value
+        for dt in doc_types
+    }
 
     for driver in drivers:
         cells: list[DashboardCell] = []
@@ -175,25 +181,34 @@ def get_dashboard(db: Annotated[Session, Depends(get_db)]):
             )
             counter[status_value] += 1
 
-        # Score de conformite : poids obligatoire x3 / profil x2 / complementaire x1.
-        # Conforme = cellule verte ou orange (doc valide) ; rouge = non conforme ;
-        # grise (non applicable) exclue du calcul.
-        applicable_weight = 0
-        compliant_weight = 0
+        # Deux indicateurs qui ne se melangent pas.
+        #
+        # Conformite : le socle applicable, et lui seul — c'est ce qui decide si
+        # la personne peut rouler. Tous les documents du socle y pesent pareil :
+        # il n'y a pas de demi-manquement, l'un ou l'autre bloque autant.
+        # Qualification : les complementaires acquis, comptes a part. Les melanger
+        # ferait baisser la conformite de quelqu'un a jour mais sans CACES.
+        #
+        # Acquis = cellule verte ou orange (le document est valide) ; rouge =
+        # manquant ou perime ; grise (hors perimetre) exclue des deux.
+        socle_total = 0
+        socle_acquis = 0
+        qualif_total = 0
+        qualif_acquises = 0
         for dt, cell in zip(doc_types, cells):
             if cell.status == CellStatus.GREY:
                 continue
-            weight = POIDS_NIVEAU.get(dt.niveau_exigence, 1)
-            applicable_weight += weight
-            if cell.status in (CellStatus.GREEN, CellStatus.ORANGE):
-                compliant_weight += weight
-        global_applicable_weight += applicable_weight
-        global_compliant_weight += compliant_weight
-        driver_score = (
-            round(compliant_weight / applicable_weight * 100)
-            if applicable_weight
-            else None
-        )
+            acquis = cell.status in (CellStatus.GREEN, CellStatus.ORANGE)
+            if est_socle[dt.id]:
+                socle_total += 1
+                socle_acquis += acquis
+            else:
+                qualif_total += 1
+                qualif_acquises += acquis
+        socle_total_global += socle_total
+        socle_acquis_global += socle_acquis
+        qualif_total_global += qualif_total
+        qualif_acquises_global += qualif_acquises
 
         out_drivers.append(
             DashboardDriver(
@@ -202,15 +217,21 @@ def get_dashboard(db: Annotated[Session, Depends(get_db)]):
                 nom=driver.nom,
                 statut=driver.statut,
                 email=driver.email,
-                profil=driver.profil,
+                equipe=driver.equipe,
+                profil_vehicule=driver.profil_vehicule,
+                interim=driver.interim,
                 cells=cells,
-                score=driver_score,
+                score=round(socle_acquis / socle_total * 100) if socle_total else None,
+                socle_manquants=socle_total - socle_acquis,
+                socle_total=socle_total,
+                qualification_acquises=qualif_acquises,
+                qualification_total=qualif_total,
             )
         )
 
     score_global = (
-        round(global_compliant_weight / global_applicable_weight * 100)
-        if global_applicable_weight
+        round(socle_acquis_global / socle_total_global * 100)
+        if socle_total_global
         else None
     )
     summary = DashboardSummary(
@@ -221,6 +242,8 @@ def get_dashboard(db: Annotated[Session, Depends(get_db)]):
             CellStatus.GREY: counter[CellStatus.GREY],
         },
         score_global=score_global,
+        qualification_acquises=qualif_acquises_global,
+        qualification_total=qualif_total_global,
     )
 
     return DashboardResponse(

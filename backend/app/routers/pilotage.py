@@ -3,7 +3,11 @@
 Auth via header X-Pilotage-Secret (pas de JWT). Necessite PILOTAGE_SECRET
 dans `.env`. Expose le taux de conformite documentaire global, deja calcule
 par le dashboard admin -- on reutilise `get_dashboard` pour ne pas dupliquer
-la logique de scoring (poids critique x3 / standard x1).
+la logique de scoring.
+
+`score_global` porte desormais la conformite au **socle** seul (etape 14) : il
+peut donc bouger a la hausse d'un coup, les complementaires ayant quitte le
+calcul. La qualification est renvoyee a part, sans etre agregee dedans.
 """
 from datetime import datetime, timezone
 from typing import Annotated
@@ -30,6 +34,8 @@ def pilotage_snapshot(db: Annotated[Session, Depends(get_db)]):
     return {
         "ts": int(datetime.now(timezone.utc).timestamp() * 1000),
         "score_global": summary.score_global,
+        "qualification_acquises": summary.qualification_acquises,
+        "qualification_total": summary.qualification_total,
         "drivers_total": len(result.drivers),
         "by_status": by_status,
     }

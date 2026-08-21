@@ -1,10 +1,10 @@
 """Liste des types de documents.
 
-Lecture seule : le niveau d'exigence (socle / habilitation / complementaire)
-est **impose par le code** — il est pose par `scripts/seed_doctypes.py` et
-n'est pas reglable depuis l'application. Un reglage par ecran donnerait
-l'illusion d'un parametrage alors que le socle doit rester le meme pour tout
-le monde.
+Lecture seule : le niveau d'exigence (socle / complementaire) et le perimetre
+(tous / asf / poids_lourd) sont **imposes par le code** — poses par
+`scripts/seed_doctypes.py`, pas reglables depuis l'application. Un reglage par
+ecran donnerait l'illusion d'un parametrage alors que le socle doit rester
+identique pour tout le monde, au perimetre pres.
 """
 from typing import Annotated
 

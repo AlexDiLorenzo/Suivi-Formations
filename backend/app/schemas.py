@@ -34,20 +34,15 @@ class TotpEnableRequest(BaseModel):
     totp_code: str = Field(min_length=6, max_length=10)
 
 
-class DriverUpdate(BaseModel):
-    """Seul champ modifiable ici : le profil de permis.
+class DriverOut(BaseModel):
+    """Une fiche depanneur — en lecture seule, sans exception.
 
-    L'identite (nom, prenom, email, dates) et le statut actif/archive
-    appartiennent a DepanTime et sont reecrits a chaque synchronisation ; les
-    modifier ici ne tiendrait pas une heure. Le profil, lui, ne decrit pas la
-    personne mais ce qu'on exige d'elle : il n'existe que dans cette
-    application.
+    Tout ce qui est ici appartient a DepanTime (ou a Flotte pour Perols) et est
+    reecrit a chaque synchronisation : identite, statut, equipe, type de
+    vehicule, interim. L'applicabilite des documents en decoule (cf. app/socle.py)
+    au lieu de se cocher. Cette application ne detient que les documents.
     """
 
-    profil: str | None = None
-
-
-class DriverOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: UUID
     prenom: str | None
@@ -55,7 +50,9 @@ class DriverOut(BaseModel):
     email: EmailStr | None
     telephone: str | None
     statut: str
-    profil: str | None
+    equipe: str | None
+    profil_vehicule: str | None
+    interim: bool
     date_entree: date | None
     date_sortie: date | None
     external_id_depantime: str | None
@@ -63,10 +60,6 @@ class DriverOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     required_document_type_ids: list[UUID] = Field(default_factory=list)
-
-
-class RequirementsSync(BaseModel):
-    document_type_ids: list[UUID]
 
 
 class DocumentTypeOut(BaseModel):
@@ -78,29 +71,9 @@ class DocumentTypeOut(BaseModel):
     categorie: str | None
     est_perimable: bool
     niveau_exigence: str
+    perimetre: str
     mode_acquisition: str
     display_order: int
-
-
-
-class ProfilOut(BaseModel):
-    value: str
-    label: str
-    document_codes: list[str]
-
-
-class RequirementCreate(BaseModel):
-    driver_id: UUID
-    document_type_id: UUID
-
-
-class RequirementOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    id: UUID
-    driver_id: UUID
-    document_type_id: UUID
-    required_since: date
-    created_at: datetime
 
 
 class CellStatus(str, Enum):
@@ -129,14 +102,25 @@ class DashboardCell(BaseModel):
 
 
 class DashboardDriver(BaseModel):
+    """`score` = conformite au socle applicable, en %. C'est le « il roule ou
+    pas ». La qualification se lit en fraction, jamais en % : un complementaire
+    absent n'est pas un manquement, l'afficher comme une note le ferait croire.
+    """
+
     id: UUID
     prenom: str | None = None
     nom: str
     statut: str
     email: str | None = None
-    profil: str | None = None
+    equipe: str | None = None
+    profil_vehicule: str | None = None
+    interim: bool = False
     cells: list[DashboardCell]
     score: int | None = None
+    socle_manquants: int = 0
+    socle_total: int = 0
+    qualification_acquises: int = 0
+    qualification_total: int = 0
 
 
 class DashboardDocType(BaseModel):
@@ -146,6 +130,7 @@ class DashboardDocType(BaseModel):
     libelle: str
     categorie: str | None = None
     niveau_exigence: str
+    perimetre: str
     est_perimable: bool
     duree_validite_jours_default: int | None = None
     display_order: int
@@ -154,6 +139,8 @@ class DashboardDocType(BaseModel):
 class DashboardSummary(BaseModel):
     by_status: dict[CellStatus, int]
     score_global: int | None = None
+    qualification_acquises: int = 0
+    qualification_total: int = 0
 
 
 class DashboardResponse(BaseModel):
@@ -257,18 +244,14 @@ class DueRemindersResponse(BaseModel):
     skipped: list[SkippedReminderItem]
 
 
-class SyncStatusOut(BaseModel):
-    active: bool
-    source: str | None = None
-
-
 class SyncResultOut(BaseModel):
     crees: int
     mis_a_jour: int
     archives: int
     reactives: int
     supprimes: int = 0
-    socle_poses: int = 0
+    exigences_posees: int = 0
+    exigences_retirees: int = 0
     ignores: list[str] = Field(default_factory=list)
     hors_depantime: list[str] = Field(default_factory=list)
 

@@ -446,6 +446,9 @@ table.matrix thead th.score-col {
 .score-badge.orange { background: var(--c-status-orange); }
 .score-badge.red    { background: var(--c-status-red); }
 .score-badge.grey   { background: var(--c-status-grey); color: var(--c-text-muted); }
+/* La qualification n'est ni bonne ni mauvaise : elle ne prend pas le code
+   couleur de la conformite, qui signale un blocage. */
+.score-badge.neutre { background: #6E8CA8; }
 
 .summary-pill.score-pill {
   color: white;
@@ -532,6 +535,23 @@ table.drivers-table tr.is-archived td {
   background: rgba(217, 122, 31, 0.15);
   color: var(--c-status-orange);
   font-weight: 600;
+}
+
+/* Ce qui elargit le socle de quelqu'un (equipe ASF, poids lourd, interim).
+   Informatif : ces attributs viennent des sources et ne se reglent pas ici. */
+.tag-perimetre {
+  margin-left: 6px;
+  padding: 1px 8px;
+  background: rgba(110, 140, 168, 0.16);
+  color: #3E5A73;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.badge-socle {
+  background: rgba(44, 97, 38, 0.10);
+  border-color: rgba(44, 97, 38, 0.35);
+  font-weight: 700;
 }
 
 .pending-block {
@@ -936,7 +956,7 @@ input[type="file"]::file-selector-button:hover {
 
 .ligne-depanneur {
   display: grid;
-  grid-template-columns: minmax(180px, 2fr) 160px repeat(4, 84px) 32px;
+  grid-template-columns: minmax(180px, 2fr) 190px 150px repeat(3, 84px) 32px;
   align-items: center;
   gap: 10px;
   width: 100%;
@@ -971,10 +991,34 @@ input[type="file"]::file-selector-button:hover {
   text-align: center;
 }
 
-.ligne-depanneur .conformite {
+.ligne-depanneur .conformite,
+.ligne-depanneur .qualification {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+/* La qualification se lit en fraction, jamais en pourcentage : « 4/11 » se
+   comprend comme un acquis en cours, « 36 % » comme une note ratee. D'ou aussi
+   sa teinte neutre — rien ici n'est un manquement. */
+.ligne-depanneur .fraction {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--c-black);
+  white-space: nowrap;
+}
+
+.ligne-depanneur .fraction .sur {
+  font-weight: 400;
+  color: var(--c-text-muted);
+}
+
+.ligne-depanneur .manque-socle {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--c-status-red);
+  white-space: nowrap;
 }
 
 .barre-score {
@@ -995,6 +1039,7 @@ input[type="file"]::file-selector-button:hover {
 .remplissage.orange { background: var(--c-status-orange); }
 .remplissage.red    { background: var(--c-status-red); }
 .remplissage.grey   { background: var(--c-status-grey); }
+.remplissage.qualif { background: #6E8CA8; }
 
 .ligne-depanneur .chevron {
   color: var(--c-text-muted);
@@ -1034,6 +1079,27 @@ input[type="file"]::file-selector-button:hover {
 
 .resume-fiche .alerte    { color: var(--c-status-red); font-weight: 600; }
 .resume-fiche .attention { color: var(--c-status-orange); font-weight: 600; }
+
+.resume-fiche .indicateur {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-right: 16px;
+  border-right: 1px solid var(--c-border);
+}
+
+.indicateur-libelle {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--c-text-muted);
+}
+
+.indicateur-detail {
+  font-size: 12px;
+  color: var(--c-text-muted);
+}
 
 .bloc-niveau {
   border: 1px solid var(--c-border);
@@ -1222,10 +1288,14 @@ input[type="file"]::file-selector-button:hover {
 
 @media (max-width: 900px) {
   .ligne-depanneur {
-    grid-template-columns: 1fr 110px 56px 56px;
+    grid-template-columns: 1fr 110px 70px;
   }
-  .ligne-depanneur .col-num:nth-of-type(n + 3),
+  .ligne-depanneur .col-num,
   .ligne-depanneur .chevron {
+    display: none;
+  }
+  .ligne-depanneur .conformite .barre-score,
+  .ligne-depanneur .qualification .barre-score {
     display: none;
   }
   .ligne-doc {

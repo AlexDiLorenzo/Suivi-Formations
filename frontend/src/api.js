@@ -114,24 +114,14 @@ export const api = {
   me: () => request('/auth/me'),
   dashboard: () => request('/dashboard'),
   docTypes: () => request('/document-types'),
-  profils: () => request('/profils'),
-  sync: {
-    status: () => request('/sync/depantime'),
-    run: () => request('/sync/depantime', { method: 'POST' }),
-  },
-  // La liste des depanneurs est le reflet de DepanTime : pas de creation, pas
-  // d'archivage, pas de retouche d'identite. Seuls le profil de permis et
-  // l'applicabilite des documents se reglent ici.
+  // Les depanneurs sont en lecture seule : la liste, l'identite, l'equipe et le
+  // type de vehicule viennent de DepanTime et de Flotte, et ce qu'on exige de
+  // chacun en decoule. Il n'y a plus ni synchro manuelle (le cron s'en charge)
+  // ni reglage d'applicabilite : les routes correspondantes ont ete retirees.
   drivers: {
     list: ({ includeArchived = false } = {}) =>
       request(`/drivers?include_archived=${includeArchived}`),
     get: (id) => request(`/drivers/${id}`),
-    update: (id, payload) => request(`/drivers/${id}`, { method: 'PATCH', body: payload }),
-    syncRequirements: (id, documentTypeIds) =>
-      request(`/drivers/${id}/requirements`, {
-        method: 'PUT',
-        body: { document_type_ids: documentTypeIds },
-      }),
   },
   documents: {
     get: (versionId) => request(`/documents/${versionId}`),

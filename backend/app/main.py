@@ -13,9 +13,6 @@ from app.routers import (
     drivers,
     internal,
     pilotage,
-    profils,
-    requirements,
-    sync,
 )
 
 
@@ -50,9 +47,7 @@ def health():
 
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(drivers.router, prefix="/api/drivers", tags=["drivers"])
-app.include_router(profils.router, prefix="/api/profils", tags=["profils"])
 app.include_router(document_types.router, prefix="/api/document-types", tags=["document-types"])
-app.include_router(requirements.router, prefix="/api/requirements", tags=["requirements"])
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["dashboard"])
 app.include_router(documents.router, prefix="/api/documents", tags=["documents"])
 app.include_router(
@@ -65,7 +60,6 @@ app.include_router(
     prefix="/api/public/document-requests",
     tags=["public"],
 )
-app.include_router(sync.router, prefix="/api/sync", tags=["sync"])
 app.include_router(internal.router, prefix="/api/internal", tags=["internal"])
 app.include_router(pilotage.router, prefix="/api/pilotage", tags=["pilotage"])
 app.include_router(docusign.router, prefix="/api/docusign", tags=["docusign"])

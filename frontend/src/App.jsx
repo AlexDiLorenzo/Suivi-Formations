@@ -44,27 +44,42 @@ const POLE_LABEL = {
   rh_administratif: 'RH',
 }
 
-// Ce qui decide de l'ordre de la fiche : le socle d'abord, le reste replie.
-const NIVEAU_ORDER = ['obligatoire', 'profil', 'complementaire']
+// Deux niveaux, et deux seulement. Le socle d'abord, deplie : c'est ce qu'on
+// vient verifier en premier, et le seul a compter dans le taux de conformite.
+const NIVEAU_ORDER = ['socle', 'complementaire']
 
 const NIVEAU_LABEL = {
-  obligatoire: 'Socle obligatoire',
-  profil: 'Selon le profil',
-  complementaire: 'Complementaire',
+  socle: 'Socle obligatoire',
+  complementaire: 'Complémentaire',
 }
 
 const NIVEAU_AIDE = {
-  obligatoire: 'Attendu de tout depanneur, sans exception.',
-  profil: 'Attendu selon le permis et les engins conduits.',
-  complementaire: 'Utile a conserver ; son absence n\'est pas un manquement.',
+  socle: 'Sans ces documents, le dépanneur ne roule pas.',
+  complementaire: 'Valorise le profil ; son absence n\'est pas un manquement.',
 }
 
-// Seul le socle est deplie d'entree : c'est ce qu'on vient verifier en premier.
-const NIVEAU_OUVERT_PAR_DEFAUT = { obligatoire: true, profil: true, complementaire: false }
+const NIVEAU_OUVERT_PAR_DEFAUT = { socle: true, complementaire: false }
 
-// Le seul niveau qui se coche au cas par cas ; le reste est impose par le code
-// (cf. backend/app/socle.py). Doit rester aligne sur NIVEAU_A_COCHER cote API.
-const NIVEAU_A_COCHER = 'profil'
+// Ce qui elargit le socle de quelqu'un. Derive de DepanTime a chaque synchro,
+// jamais coche ici (cf. backend/app/socle.py) : ces libelles ne servent qu'a
+// expliquer, sur la fiche, pourquoi cette personne a plus de lignes qu'une autre.
+const PERIMETRE_LABEL = {
+  asf: 'Équipe ASF',
+  poids_lourd: 'Poids lourd',
+}
+
+const EQUIPE_LABEL = {
+  asf: 'Équipe ASF',
+  ville: 'Équipe Ville',
+  reliv: 'Équipe relivraison',
+}
+
+const PROFIL_VEHICULE_LABEL = {
+  fourgon: 'Fourgon',
+  '4x4': '4x4',
+  plateau_vl: 'Plateau VL',
+  plateau_pl: 'Plateau poids lourd',
+}
 
 function formatDateFr(iso) {
   if (!iso) return ''
@@ -91,26 +106,33 @@ function formatTaille(octets) {
 }
 
 // Compteurs d'une ligne de la liste : ce qui manque, ce qui va expirer.
+// Le socle et le complementaire sont comptes separement de bout en bout : un
+// CACES absent et un contrat de travail absent n'ont pas la meme portee, les
+// additionner noierait le second dans le premier.
 function compterCellules(cells, docTypeById) {
-  const total = { manquants: 0, perimes: 0, expirent: 0, applicables: 0, valides: 0 }
+  const total = {
+    manquants: 0, perimes: 0, expirent: 0, applicables: 0, valides: 0,
+    socleManquants: 0, socleTotal: 0, qualifAcquises: 0, qualifTotal: 0,
+  }
   for (const c of cells) {
     if (c.status === 'grey') continue
     total.applicables += 1
-    if (c.status === 'red') {
+    const rouge = c.status === 'red'
+    if (rouge) {
       if (c.reason === 'expired') total.perimes += 1
       else total.manquants += 1
     } else {
       total.valides += 1
       if (c.status === 'orange') total.expirent += 1
     }
+    if (docTypeById[c.document_type_id]?.niveau_exigence === 'socle') {
+      total.socleTotal += 1
+      if (rouge) total.socleManquants += 1
+    } else {
+      total.qualifTotal += 1
+      if (!rouge) total.qualifAcquises += 1
+    }
   }
-  // Un manque sur le socle obligatoire ne pese pas comme un manque sur un
-  // document complementaire : on le remonte a part pour la liste.
-  total.manquantsObligatoires = cells.filter((c) => {
-    if (c.status !== 'red') return false
-    const dt = docTypeById[c.document_type_id]
-    return dt?.niveau_exigence === 'obligatoire'
-  }).length
   return total
 }
 
@@ -332,7 +354,7 @@ function PastilleEtat({ compte, ton, libelle }) {
   )
 }
 
-function DriversListView({ docTypes, onOuvrirFiche, rafraichir, data, onSync, syncStatut, syncEnCours }) {
+function DriversListView({ docTypes, onOuvrirFiche, rafraichir, data }) {
   const [recherche, setRecherche] = useState('')
   const [filtre, setFiltre] = useState('tous')
   const [exportEnCours, setExportEnCours] = useState(false)
@@ -359,16 +381,18 @@ function DriversListView({ docTypes, onOuvrirFiche, rafraichir, data, onSync, sy
   const visibles = lignes.filter(({ driver, compte }) => {
     if (q && !nomComplet(driver).toLowerCase().includes(q)) return false
     if (filtre === 'incomplets') return compte.manquants + compte.perimes > 0
-    if (filtre === 'socle') return compte.manquantsObligatoires > 0
+    if (filtre === 'socle') return compte.socleManquants > 0
     if (filtre === 'expirent') return compte.expirent > 0
     return true
   })
 
   const compteurs = {
     incomplets: lignes.filter((l) => l.compte.manquants + l.compte.perimes > 0).length,
-    socle: lignes.filter((l) => l.compte.manquantsObligatoires > 0).length,
+    socle: lignes.filter((l) => l.compte.socleManquants > 0).length,
     expirent: lignes.filter((l) => l.compte.expirent > 0).length,
   }
+
+  const { qualification_acquises: qualifOk, qualification_total: qualifTotal } = data.summary
 
   return (
     <>
@@ -376,17 +400,12 @@ function DriversListView({ docTypes, onOuvrirFiche, rafraichir, data, onSync, sy
         <div>
           <h2>Dépanneurs</h2>
           <p className="muted">
-            {data.drivers.length} actifs · conformité globale{' '}
+            {data.drivers.length} actifs · conformité au socle{' '}
             {data.summary.score_global != null ? `${data.summary.score_global}%` : '—'}
+            {qualifTotal > 0 && ` · qualification ${qualifOk}/${qualifTotal}`}
           </p>
         </div>
         <div className="entete-actions">
-          {syncStatut?.active && (
-            <button className="btn btn-ghost" onClick={onSync} disabled={syncEnCours}
-              title="Aligner la liste sur DepanTime (Montpellier) et Flotte (Pérols)">
-              {syncEnCours ? 'Synchronisation…' : '⟳ Synchroniser l’équipe'}
-            </button>
-          )}
           <button className="btn btn-ghost" onClick={exporterTout} disabled={exportEnCours}
             title="Archive ZIP de tous les documents à jour, un dossier par dépanneur">
             {exportEnCours ? 'Préparation…' : '⬇ Tout exporter (ZIP)'}
@@ -430,7 +449,7 @@ function DriversListView({ docTypes, onOuvrirFiche, rafraichir, data, onSync, sy
           <div className="ligne-depanneur entete">
             <span>Dépanneur</span>
             <span>Conformité</span>
-            <span className="col-num">Socle</span>
+            <span>Qualification</span>
             <span className="col-num">Manquants</span>
             <span className="col-num">Périmés</span>
             <span className="col-num">Expirent</span>
@@ -445,6 +464,8 @@ function DriversListView({ docTypes, onOuvrirFiche, rafraichir, data, onSync, sy
             >
               <span className="nom">
                 <strong>{driver.nom}</strong> {driver.prenom || ''}
+                {driver.equipe === 'asf' && <span className="tag tag-perimetre">ASF</span>}
+                {driver.profil_vehicule === 'plateau_pl' && <span className="tag tag-perimetre">PL</span>}
               </span>
               <span className="conformite">
                 <ScoreBadge score={driver.score} />
@@ -454,10 +475,24 @@ function DriversListView({ docTypes, onOuvrirFiche, rafraichir, data, onSync, sy
                     style={{ width: `${driver.score ?? 0}%` }}
                   />
                 </span>
+                {compte.socleManquants > 0 && (
+                  <span className="manque-socle" title="documents du socle manquants ou périmés">
+                    ⚠ {compte.socleManquants}
+                  </span>
+                )}
               </span>
-              <span className="col-num">
-                <PastilleEtat compte={compte.manquantsObligatoires} ton="red"
-                  libelle="documents du socle obligatoire manquants" />
+              {/* Une fraction, jamais un pourcentage : 4/11 se lit comme un
+                  acquis en cours, 36 % comme une note ratee. */}
+              <span className="qualification">
+                <span className="fraction">
+                  {compte.qualifAcquises}<span className="sur">/{compte.qualifTotal}</span>
+                </span>
+                <span className="barre-score">
+                  <span
+                    className="remplissage qualif"
+                    style={{ width: `${compte.qualifTotal ? (compte.qualifAcquises / compte.qualifTotal) * 100 : 0}%` }}
+                  />
+                </span>
               </span>
               <span className="col-num">
                 <PastilleEtat compte={compte.manquants} ton="red" libelle="jamais transmis" />
@@ -503,6 +538,10 @@ function LigneDocument({ docType, cell, onDeposer, onVoir }) {
       <span className="doc-libelle">
         {docType.libelle}
         <span className="doc-categorie">{CATEGORIE_LABEL[docType.categorie] || '—'}</span>
+        {/* Dit pourquoi cette ligne est la : un socle plus large qu'ailleurs. */}
+        {docType.perimetre && docType.perimetre !== 'tous' && (
+          <span className="tag tag-perimetre">{PERIMETRE_LABEL[docType.perimetre] || docType.perimetre}</span>
+        )}
       </span>
 
       <span className="doc-etat">
@@ -540,7 +579,7 @@ function LigneDocument({ docType, cell, onDeposer, onVoir }) {
   )
 }
 
-function DriverSheetView({ driverId, docTypes, data, onRetour, rafraichir, onModifier }) {
+function DriverSheetView({ driverId, docTypes, data, onRetour, rafraichir }) {
   const [ouvertes, setOuvertes] = useState(NIVEAU_OUVERT_PAR_DEFAUT)
   const [upload, setUpload] = useState(null)   // { docType, cell, fichier }
   const [apercu, setApercu] = useState(null)   // { versionId, titre }
@@ -601,20 +640,19 @@ function DriverSheetView({ driverId, docTypes, data, onRetour, rafraichir, onMod
       <div className="entete-fiche">
         <div>
           <h2>{driver.nom} {driver.prenom || ''}</h2>
+          {/* Equipe, vehicule et interim viennent de DepanTime et ne se
+              modifient pas ici : ils sont affiches parce qu'ils expliquent
+              l'etendue du socle de cette personne. */}
           <p className="muted">
             {driver.email || 'Pas d\'email'}
-            {driver.profil ? ` · ${driver.profil === 'permis_c_ce' ? 'Permis C/CE' : 'Permis B'}` : ' · profil non renseigné'}
-            {nonApplicables > 0 && ` · ${nonApplicables} document(s) non applicable(s)`}
+            {driver.equipe && ` · ${EQUIPE_LABEL[driver.equipe] || driver.equipe}`}
+            {driver.profil_vehicule &&
+              ` · ${PROFIL_VEHICULE_LABEL[driver.profil_vehicule] || driver.profil_vehicule}`}
+            {driver.interim && ' · Intérimaire'}
+            {nonApplicables > 0 && ` · ${nonApplicables} hors périmètre`}
           </p>
         </div>
         <div className="entete-actions">
-          <span className={`score-badge ${scoreClass(driver.score)}`}>
-            {driver.score != null ? `${driver.score}%` : '—'}
-          </span>
-          <button className="btn btn-ghost" onClick={() => onModifier(driver)}
-            title="Régler le profil de permis et les documents attendus">
-            Profil &amp; documents attendus
-          </button>
           <button className="btn btn-ghost" onClick={exporterFiche} disabled={exportEnCours}
             title="Archive ZIP des documents à jour, nommés proprement">
             {exportEnCours ? 'Préparation…' : '⬇ Dossier ZIP'}
@@ -623,9 +661,24 @@ function DriverSheetView({ driverId, docTypes, data, onRetour, rafraichir, onMod
       </div>
 
       <div className="resume-fiche">
-        <span><strong>{compte.valides}</strong> / {compte.applicables} à jour</span>
-        {compte.manquantsObligatoires > 0 && (
-          <span className="alerte">{compte.manquantsObligatoires} manque(s) sur le socle</span>
+        <span className="indicateur">
+          <span className="indicateur-libelle">Conformité</span>
+          <span className={`score-badge ${scoreClass(driver.score)}`}>
+            {driver.score != null ? `${driver.score}%` : '—'}
+          </span>
+          <span className="indicateur-detail">
+            {compte.socleTotal - compte.socleManquants}/{compte.socleTotal} du socle
+          </span>
+        </span>
+        <span className="indicateur">
+          <span className="indicateur-libelle">Qualification</span>
+          <span className="score-badge neutre">
+            {compte.qualifAcquises}/{compte.qualifTotal}
+          </span>
+          <span className="indicateur-detail">habilitations acquises</span>
+        </span>
+        {compte.socleManquants > 0 && (
+          <span className="alerte">{compte.socleManquants} manque(s) sur le socle</span>
         )}
         {compte.perimes > 0 && <span className="alerte">{compte.perimes} périmé(s)</span>}
         {compte.expirent > 0 && <span className="attention">{compte.expirent} expire(nt) sous 90 j</span>}
@@ -1046,183 +1099,17 @@ function UploadModal({
 // Drivers
 // =====================================================================
 
-/* La liste des dépanneurs vient de DepanTime et n'est pas modifiable ici : ni
-   création, ni archivage, ni retouche de l'identité — la synchronisation les
-   écraserait. Cette modale ne règle que ce qui appartient à l'application :
-   le profil de permis et les documents attendus de la personne. */
-function DriverProfilModal({ driver, docTypes, profils, onClose, onSaved }) {
-  // La fiche complete est relue ici : selon l'ecran appelant, l'objet recu vient
-  // du tableau de bord et ne porte pas les applicabilites. S'en remettre a lui
-  // reviendrait a enregistrer une liste vide, donc a tout decocher.
-  const [complet, setComplet] = useState(null)
-  const [profil, setProfil] = useState(driver.profil || '')
-  const [applicableIds, setApplicableIds] = useState(null)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
+/* Vue en lecture seule, et c'est tout ce qu'elle peut etre.
 
-  useEffect(() => {
-    api.drivers
-      .get(driver.id)
-      .then((d) => {
-        setComplet(d)
-        setProfil(d.profil || '')
-        setApplicableIds(new Set(d.required_document_type_ids || []))
-      })
-      .catch((e) => setError(e.detail || String(e)))
-  }, [driver.id])
-
-  const profilsParValeur = Object.fromEntries(profils.map((p) => [p.value, p]))
-  const docTypeParCode = Object.fromEntries(docTypes.map((dt) => [dt.code, dt]))
-
-  function handleProfilChange(valeur) {
-    setProfil(valeur)
-    // Choisir un profil pré-coche les documents attendus, sans jamais décocher
-    // ce qui a déjà été ajusté à la main.
-    const codes = profilsParValeur[valeur]?.document_codes || []
-    if (!codes.length) return
-    setApplicableIds((prec) => {
-      const suivant = new Set(prec || [])
-      for (const code of codes) {
-        const dt = docTypeParCode[code]
-        if (dt) suivant.add(dt.id)
-      }
-      return suivant
-    })
-  }
-
-  function toggleApplicable(id) {
-    setApplicableIds((prec) => {
-      const suivant = new Set(prec || [])
-      if (suivant.has(id)) suivant.delete(id)
-      else suivant.add(id)
-      return suivant
-    })
-  }
-
-  async function handleSubmit(e) {
-    e.preventDefault()
-    if (!applicableIds) return          // fiche pas encore chargee
-    setError('')
-    setSaving(true)
-    try {
-      if ((complet?.profil || '') !== profil) {
-        await api.drivers.update(driver.id, { profil: profil || null })
-      }
-      await api.drivers.syncRequirements(driver.id, Array.from(applicableIds))
-      onSaved()
-    } catch (err) {
-      setError(err.detail || 'Erreur lors de l\'enregistrement')
-      setSaving(false)
-    }
-  }
-
-  // Le socle est impose par le code ; seules les habilitations se cochent.
-  const parOrdre = (a, b) => a.display_order - b.display_order
-  const habilitations = docTypes.filter((dt) => dt.niveau_exigence === NIVEAU_A_COCHER).sort(parOrdre)
-  const socle = docTypes.filter((dt) => dt.niveau_exigence !== NIVEAU_A_COCHER).sort(parOrdre)
-
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <form className="modal-card" onClick={(e) => e.stopPropagation()} onSubmit={handleSubmit}>
-        <header className="modal-header">
-          <h2>{driver.nom} {driver.prenom || ''}</h2>
-          <button type="button" className="icon-btn" onClick={onClose} aria-label="Fermer">×</button>
-        </header>
-
-        <div className="modal-body">
-          <div className="bandeau-info">
-            L'identité et le statut de ce dépanneur viennent de son application source —
-            <strong>DepanTime</strong> pour Montpellier, <strong>Flotte</strong> pour Pérols —
-            et ne se modifient que là-bas. Ici, on règle ce qu'on exige de lui.
-          </div>
-
-          <dl className="fiche-identite">
-            <div><dt>Email</dt><dd>{complet?.email || driver.email || '—'}</dd></div>
-            <div><dt>Entrée</dt><dd>{formatDateFr(complet?.date_entree) || '—'}</dd></div>
-            <div><dt>Statut</dt><dd>{driver.statut === 'archived' ? 'Archivé' : 'Actif'}</dd></div>
-          </dl>
-
-          {!applicableIds && !error && <p className="hint">Chargement de la fiche…</p>}
-
-          <div className="section">
-            <h3>Profil de permis</h3>
-            <div className="field">
-              <select value={profil} onChange={(e) => handleProfilChange(e.target.value)}>
-                <option value="">— Non défini —</option>
-                {profils.map((p) => (
-                  <option key={p.value} value={p.value}>{p.label}</option>
-                ))}
-              </select>
-            </div>
-            <p className="hint">
-              Choisir un profil pré-coche les documents attendus pour ce type de permis.
-              L'ajustement reste possible case par case ci-dessous.
-            </p>
-          </div>
-
-          <div className="section">
-            <h3>Habilitations attendues de cette personne</h3>
-            <p className="hint">
-              Seules les habilitations se cochent : elles dépendent du permis et des
-              engins conduits. Une habilitation non cochée n'apparaît pas sur sa fiche
-              et ne compte pas dans son score.
-            </p>
-            <div className="checks">
-              {habilitations.map((dt) => (
-                <label key={dt.id} className="check">
-                  <input
-                    type="checkbox"
-                    disabled={!applicableIds}
-                    checked={applicableIds ? applicableIds.has(dt.id) : false}
-                    onChange={() => toggleApplicable(dt.id)}
-                  />
-                  <span>
-                    {dt.libelle}
-                    <span className="doc-categorie">{CATEGORIE_LABEL[dt.categorie] || ''}</span>
-                  </span>
-                </label>
-              ))}
-            </div>
-          </div>
-
-          <div className="section">
-            <h3>Socle commun</h3>
-            <p className="hint">
-              Attendu de tout dépanneur, sans exception. Défini dans le code, identique
-              pour tout le monde — il n'y a rien à régler ici.
-            </p>
-            <div className="checks socle-fige">
-              {socle.map((dt) => (
-                <span key={dt.id} className="check">
-                  <input type="checkbox" checked readOnly disabled />
-                  <span>
-                    {dt.libelle}
-                    <span className="doc-categorie">{CATEGORIE_LABEL[dt.categorie] || ''}</span>
-                  </span>
-                </span>
-              ))}
-            </div>
-          </div>
-
-          {error && <div className="error">{error}</div>}
-        </div>
-
-        <footer className="modal-footer">
-          <button type="button" className="btn btn-ghost" onClick={onClose}>Annuler</button>
-          <button type="submit" className="btn" disabled={saving || !applicableIds}>
-            {saving ? 'Enregistrement…' : 'Enregistrer'}
-          </button>
-        </footer>
-      </form>
-    </div>
-  )
-}
-
-function DriversView({ docTypes, profils, syncStatut, onApresModification }) {
+   La liste vient de DepanTime et de Flotte ; l'equipe, le type de vehicule et
+   l'interim aussi, et c'est d'eux que decoule le socle attendu de chacun
+   (cf. backend/app/socle.py). Il n'y a donc plus rien a cocher ici : l'ancien
+   reglage document par document derivait des la premiere mutation oubliee, et
+   personne ne s'en apercevait puisque la fiche restait verte. */
+function DriversView({ docTypes, onApresModification }) {
   const [drivers, setDrivers] = useState(null)
   const [error, setError] = useState('')
   const [includeArchived, setIncludeArchived] = useState(false)
-  const [editing, setEditing] = useState(null) // null | 'new' | driver object
 
   function reload() {
     setDrivers(null)
@@ -1235,24 +1122,32 @@ function DriversView({ docTypes, profils, syncStatut, onApresModification }) {
   useEffect(reload, [includeArchived])
 
   const docTypeById = Object.fromEntries(docTypes.map((dt) => [dt.id, dt]))
-  const synchronise = syncStatut?.active
+
+  function perimetresDe(driver) {
+    const p = []
+    if (driver.equipe === 'asf') p.push(PERIMETRE_LABEL.asf)
+    if (driver.profil_vehicule === 'plateau_pl') p.push(PERIMETRE_LABEL.poids_lourd)
+    return p
+  }
 
   return (
     <>
       <div className="entete-page">
         <div>
-          <h2>Équipe & applicabilité</h2>
+          <h2>Équipe & périmètres</h2>
           <p className="muted">
-            Le profil de permis et les documents applicables à chacun se règlent ici.
+            Qui est attendu sur quoi — et pourquoi. Tout vient des sources, rien ne se règle ici.
           </p>
         </div>
+        <button className="btn btn-ghost btn-sm" onClick={reload}>Actualiser</button>
       </div>
 
       <div className="bandeau-info">
         La liste est le reflet de deux sources : <strong>DepanTime</strong> pour les
         sociétés suivies au relevé de temps, <strong>Flotte</strong> pour l'équipe de Pérols.
-        Ajouter, renommer ou archiver un dépanneur se fait là-bas, et rien d'autre. Ici on
-        règle seulement ce qu'on exige de chacun, et on dépose ses documents.
+        Elles fournissent aussi l'équipe et le type de véhicule, d'où découle le socle
+        attendu de chacun. Une correction se fait là-bas et redescend à la synchronisation
+        suivante, qui tourne toute seule.
       </div>
 
       <div className="toolbar">
@@ -1271,7 +1166,8 @@ function DriversView({ docTypes, profils, syncStatut, onApresModification }) {
 
       {drivers && drivers.length === 0 && (
         <div className="empty">
-          Aucun dépanneur. Lance la synchronisation depuis l'onglet Dépanneurs.
+          Aucun dépanneur. La synchronisation n'a pas encore tourné, ou les deux
+          sources sont muettes.
         </div>
       )}
 
@@ -1280,70 +1176,74 @@ function DriversView({ docTypes, profils, syncStatut, onApresModification }) {
           <table className="matrix drivers-table">
             <thead>
               <tr>
-                <th>Depanneur</th>
+                <th>Dépanneur</th>
                 <th>Email</th>
-                <th>Telephone</th>
-                <th>Entree</th>
-                <th>Documents applicables</th>
+                <th>Équipe</th>
+                <th>Véhicule</th>
+                <th>Entrée</th>
+                <th>Socle élargi</th>
+                <th>Documents attendus</th>
                 <th>Statut</th>
-                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {drivers.map((d) => (
-                <tr key={d.id} className={d.statut === 'archived' ? 'is-archived' : ''}>
-                  <td>
-                    <strong>{d.nom}</strong> {d.prenom || ''}
-                  </td>
-                  <td>{d.email || '—'}</td>
-                  <td>{d.telephone || '—'}</td>
-                  <td>{formatDateFr(d.date_entree) || '—'}</td>
-                  <td>
-                    {d.required_document_type_ids.length === 0 ? (
-                      <span className="muted">aucun</span>
-                    ) : (
-                      <div className="badges">
-                        {d.required_document_type_ids
-                          .map((id) => docTypeById[id])
-                          .filter(Boolean)
-                          .sort((a, b) => a.display_order - b.display_order)
-                          .map((dt) => (
-                            <span key={dt.id} className="badge">{dt.code}</span>
+              {drivers.map((d) => {
+                const perimetres = perimetresDe(d)
+                return (
+                  <tr key={d.id} className={d.statut === 'archived' ? 'is-archived' : ''}>
+                    <td>
+                      <strong>{d.nom}</strong> {d.prenom || ''}
+                      {d.interim && <span className="tag tag-perimetre">Intérim</span>}
+                    </td>
+                    <td>{d.email || '—'}</td>
+                    <td>{EQUIPE_LABEL[d.equipe] || d.equipe || '—'}</td>
+                    <td>{PROFIL_VEHICULE_LABEL[d.profil_vehicule] || d.profil_vehicule || '—'}</td>
+                    <td>{formatDateFr(d.date_entree) || '—'}</td>
+                    <td>
+                      {perimetres.length === 0 ? (
+                        <span className="muted">socle commun</span>
+                      ) : (
+                        <div className="badges">
+                          {perimetres.map((p) => (
+                            <span key={p} className="tag tag-perimetre">{p}</span>
                           ))}
-                      </div>
-                    )}
-                  </td>
-                  <td>
-                    {d.statut === 'archived' ? (
-                      <span className="tag tag-archived">Archive</span>
-                    ) : (
-                      <span className="tag tag-active">Actif</span>
-                    )}
-                  </td>
-                  <td className="actions">
-                    <button className="btn btn-ghost btn-sm" onClick={() => setEditing(d)}>
-                      Profil &amp; documents
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                        </div>
+                      )}
+                    </td>
+                    <td>
+                      {d.required_document_type_ids.length === 0 ? (
+                        <span className="muted">aucun</span>
+                      ) : (
+                        <div className="badges">
+                          {d.required_document_type_ids
+                            .map((id) => docTypeById[id])
+                            .filter(Boolean)
+                            .sort((a, b) => a.display_order - b.display_order)
+                            .map((dt) => (
+                              <span
+                                key={dt.id}
+                                className={`badge ${dt.niveau_exigence === 'socle' ? 'badge-socle' : ''}`}
+                                title={dt.libelle}
+                              >
+                                {dt.code}
+                              </span>
+                            ))}
+                        </div>
+                      )}
+                    </td>
+                    <td>
+                      {d.statut === 'archived' ? (
+                        <span className="tag tag-archived">Archivé</span>
+                      ) : (
+                        <span className="tag tag-active">Actif</span>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
-      )}
-
-      {editing && (
-        <DriverProfilModal
-          driver={editing}
-          docTypes={docTypes}
-          profils={profils}
-          onClose={() => setEditing(null)}
-          onSaved={() => {
-            setEditing(null)
-            reload()
-            onApresModification?.()
-          }}
-        />
       )}
     </>
   )
@@ -1370,7 +1270,7 @@ function NavBar({ view, onChangeView, me, onLogout }) {
             className={`tab ${view === 'equipe' ? 'active' : ''}`}
             onClick={() => onChangeView('equipe')}
           >
-            Équipe & applicabilité
+            Équipe & périmètres
           </button>
         </nav>
       </div>
@@ -1535,13 +1435,8 @@ function AdminApp() {
   const [view, setView] = useState('depanneurs')
   const [ficheId, setFicheId] = useState(null)
   const [docTypes, setDocTypes] = useState([])
-  const [profils, setProfils] = useState([])
   const [data, setData] = useState(null)
   const [erreur, setErreur] = useState('')
-  const [syncStatut, setSyncStatut] = useState(null)
-  const [syncEnCours, setSyncEnCours] = useState(false)
-  const [syncMessage, setSyncMessage] = useState('')
-  const [editDriver, setEditDriver] = useState(null)
 
   // Le tableau de bord porte a la fois les types, les depanneurs et l'etat de
   // chaque document : la liste et la fiche s'en servent toutes les deux, on le
@@ -1555,32 +1450,8 @@ function AdminApp() {
   useEffect(() => {
     if (!authed) return
     api.me().then(setMe).catch(() => {})
-    api.profils().then(setProfils).catch(() => {})
-    api.sync.status().then(setSyncStatut).catch(() => setSyncStatut({ active: false }))
     recharger()
   }, [authed, recharger])
-
-  async function lancerSync() {
-    setSyncEnCours(true)
-    setSyncMessage('')
-    try {
-      const r = await api.sync.run()
-      const parts = []
-      if (r.crees) parts.push(`${r.crees} ajouté(s)`)
-      if (r.archives) parts.push(`${r.archives} archivé(s)`)
-      if (r.reactives) parts.push(`${r.reactives} réactivé(s)`)
-      setSyncMessage(
-        parts.length
-          ? `Synchronisation : ${parts.join(', ')} (${r.mis_a_jour} inchangé(s)).`
-          : `Déjà à jour — ${r.mis_a_jour} dépanneur(s) vérifié(s).`
-      )
-      recharger()
-    } catch (err) {
-      setSyncMessage(err.detail || 'Erreur de synchronisation')
-    } finally {
-      setSyncEnCours(false)
-    }
-  }
 
   function handleLogout() {
     clearToken()
@@ -1602,7 +1473,6 @@ function AdminApp() {
       />
       <main className="dashboard">
         {erreur && <div className="error">{erreur}</div>}
-        {syncMessage && <div className="bandeau-info">{syncMessage}</div>}
 
         {view === 'depanneurs' && !ficheId && (
           <DriversListView
@@ -1610,9 +1480,6 @@ function AdminApp() {
             data={data}
             rafraichir={recharger}
             onOuvrirFiche={setFicheId}
-            onSync={lancerSync}
-            syncStatut={syncStatut}
-            syncEnCours={syncEnCours}
           />
         )}
         {view === 'depanneurs' && ficheId && (
@@ -1622,28 +1489,12 @@ function AdminApp() {
             data={data}
             rafraichir={recharger}
             onRetour={() => setFicheId(null)}
-            onModifier={setEditDriver}
           />
         )}
         {view === 'equipe' && (
-          <DriversView
-            docTypes={docTypes}
-            profils={profils}
-            syncStatut={syncStatut}
-            onApresModification={recharger}
-          />
+          <DriversView docTypes={docTypes} onApresModification={recharger} />
         )}
       </main>
-
-      {editDriver && (
-        <DriverProfilModal
-          driver={editDriver}
-          docTypes={docTypes}
-          profils={profils}
-          onClose={() => setEditDriver(null)}
-          onSaved={() => { setEditDriver(null); recharger() }}
-        />
-      )}
     </>
   )
 }

@@ -36,6 +36,17 @@ EQUIPE_ASF = "asf"
 PROFIL_VEHICULE_POIDS_LOURD = "plateau_pl"
 
 
+def site_de(driver) -> str | None:
+    """Le site d'origine, lu dans la cle externe (`mtp:7`, `perols:12`).
+
+    Pas de colonne dediee : la cle porte deja l'information et elle est
+    reecrite a chaque synchro. Une colonne de plus serait un second endroit
+    a tenir d'accord avec le premier.
+    """
+    cle = driver.external_id_depantime or ""
+    return cle.split(":", 1)[0] if ":" in cle else None
+
+
 class DocumentCategorie(str, PyEnum):
     RH_ADMINISTRATIF = "rh_administratif"
     CONDUITE_PERMIS = "conduite_permis"

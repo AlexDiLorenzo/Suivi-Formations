@@ -537,6 +537,40 @@ table.drivers-table tr.is-archived td {
   font-weight: 600;
 }
 
+/* Perols vient de Flotte, pas de DepanTime. Le jaune de la charte le distingue
+   au premier coup d'oeil, et la ligne prend une teinte tres legere : assez pour
+   qu'on voie deux equipes dans la liste, pas assez pour concurrencer le code
+   couleur rouge/orange/vert de la conformite, qui doit rester le signal fort. */
+.tag-perols {
+  margin-left: 6px;
+  padding: 1px 8px;
+  background: var(--c-accent);
+  color: var(--c-black);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.ligne-depanneur.site-perols {
+  background: #FDFCEF;
+  box-shadow: inset 3px 0 0 var(--c-accent);
+}
+
+.ligne-depanneur.site-perols:hover:not(.entete) {
+  background: #F8F6E2;
+}
+
+tr.site-perols > td:first-child {
+  box-shadow: inset 3px 0 0 var(--c-accent);
+}
+
+/* Sur la fiche, le titre porte deja tout le poids : le tag y est simplement
+   remonte a la ligne du nom, sans teinter quoi que ce soit. */
+.entete-fiche h2 .tag-perols {
+  vertical-align: middle;
+  margin-left: 10px;
+  font-size: 12px;
+}
+
 /* Ce qui elargit le socle de quelqu'un (equipe ASF, poids lourd, interim).
    Informatif : ces attributs viennent des sources et ne se reglent pas ici. */
 .tag-perimetre {

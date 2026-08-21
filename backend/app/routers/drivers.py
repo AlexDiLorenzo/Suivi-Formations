@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.deps import get_current_admin
-from app.models import Driver, DriverRequiredDocument, DriverStatus
+from app.models import Driver, DriverRequiredDocument, DriverStatus, site_de
 from app.schemas import DriverOut
 
 
@@ -33,6 +33,7 @@ def _serialize(driver: Driver, doctype_ids: list[UUID]) -> DriverOut:
         email=driver.email,
         telephone=driver.telephone,
         statut=driver.statut,
+        site=site_de(driver),
         equipe=driver.equipe,
         profil_vehicule=driver.profil_vehicule,
         interim=driver.interim,

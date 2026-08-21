@@ -20,6 +20,7 @@ from app.models import (
     DriverRequiredDocument,
     DriverStatus,
     SignatureEnvelope,
+    site_de,
 )
 from app.schemas import (
     CellRedReason,
@@ -217,6 +218,7 @@ def get_dashboard(db: Annotated[Session, Depends(get_db)]):
                 nom=driver.nom,
                 statut=driver.statut,
                 email=driver.email,
+                site=site_de(driver),
                 equipe=driver.equipe,
                 profil_vehicule=driver.profil_vehicule,
                 interim=driver.interim,

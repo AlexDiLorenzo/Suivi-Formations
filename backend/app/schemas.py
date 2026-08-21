@@ -50,6 +50,7 @@ class DriverOut(BaseModel):
     email: EmailStr | None
     telephone: str | None
     statut: str
+    site: str | None = None
     equipe: str | None
     profil_vehicule: str | None
     interim: bool
@@ -112,6 +113,11 @@ class DashboardDriver(BaseModel):
     nom: str
     statut: str
     email: str | None = None
+    # `mtp` (DepanTime) ou `perols` (Flotte) : les deux equipes se suivent dans
+    # la meme liste mais ne viennent pas du meme endroit, et Perols n'a ni
+    # prenom ni equipe. Le distinguer d'un coup d'oeil evite de chercher
+    # pourquoi une fiche est plus vide que sa voisine.
+    site: str | None = None
     equipe: str | None = None
     profil_vehicule: str | None = None
     interim: bool = False

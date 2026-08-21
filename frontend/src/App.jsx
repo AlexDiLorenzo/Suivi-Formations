@@ -74,6 +74,14 @@ const EQUIPE_LABEL = {
   reliv: 'Équipe relivraison',
 }
 
+// D'ou vient la fiche. Perols est tenu dans Flotte, qui ne connait ni prenom,
+// ni equipe, ni interim : signaler la source evite de chercher pourquoi ces
+// lignes sont plus vides que leurs voisines.
+const SITE_LABEL = {
+  perols: 'Pérols',
+  mtp: 'Montpellier',
+}
+
 const PROFIL_VEHICULE_LABEL = {
   fourgon: 'Fourgon',
   '4x4': '4x4',
@@ -501,11 +509,12 @@ function DriversListView({ docTypes, onOuvrirFiche, rafraichir, data }) {
             <button
               type="button"
               key={driver.id}
-              className="ligne-depanneur"
+              className={`ligne-depanneur ${driver.site === 'perols' ? 'site-perols' : ''}`}
               onClick={() => onOuvrirFiche(driver.id)}
             >
               <span className="nom">
                 <strong>{driver.nom}</strong> {driver.prenom || ''}
+                {driver.site === 'perols' && <span className="tag tag-perols">Pérols</span>}
                 {driver.equipe === 'asf' && <span className="tag tag-perimetre">ASF</span>}
                 {driver.profil_vehicule === 'plateau_pl' && <span className="tag tag-perimetre">PL</span>}
               </span>
@@ -741,7 +750,10 @@ function DriverSheetView({ driverId, docTypes, data, onRetour, rafraichir }) {
 
       <div className="entete-fiche">
         <div>
-          <h2>{driver.nom} {driver.prenom || ''}</h2>
+          <h2>
+            {driver.nom} {driver.prenom || ''}
+            {driver.site === 'perols' && <span className="tag tag-perols">Pérols</span>}
+          </h2>
           {/* Equipe, vehicule et interim viennent de DepanTime et ne se
               modifient pas ici : ils sont affiches parce qu'ils expliquent
               l'etendue du socle de cette personne. */}
@@ -1280,6 +1292,7 @@ function DriversView({ docTypes, onApresModification }) {
             <thead>
               <tr>
                 <th>Dépanneur</th>
+                <th>Site</th>
                 <th>Email</th>
                 <th>Équipe</th>
                 <th>Véhicule</th>
@@ -1293,10 +1306,15 @@ function DriversView({ docTypes, onApresModification }) {
               {drivers.map((d) => {
                 const perimetres = perimetresDe(d)
                 return (
-                  <tr key={d.id} className={d.statut === 'archived' ? 'is-archived' : ''}>
+                  <tr key={d.id} className={`${d.statut === 'archived' ? 'is-archived' : ''} ${d.site === 'perols' ? 'site-perols' : ''}`}>
                     <td>
                       <strong>{d.nom}</strong> {d.prenom || ''}
                       {d.interim && <span className="tag tag-perimetre">Intérim</span>}
+                    </td>
+                    <td>
+                      {d.site === 'perols'
+                        ? <span className="tag tag-perols">Pérols</span>
+                        : <span className="muted">{SITE_LABEL[d.site] || '—'}</span>}
                     </td>
                     <td>{d.email || '—'}</td>
                     <td>{EQUIPE_LABEL[d.equipe] || d.equipe || '—'}</td>
